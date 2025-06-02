@@ -1,4 +1,4 @@
-# gRPC Proxy Gateway - Docker Quick Start Guide
+# gStreamGate - Docker Quick Start Guide
 
 ## 🚀 Quick Start
 
