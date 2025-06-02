@@ -1,0 +1,291 @@
+version: '3.8'
+
+# ==========================================
+# gRPC Proxy 完整部署配置
+# ==========================================
+
+services:
+  # ==========================================
+  # gRPC Proxy 應用
+  # ==========================================
+  grpc-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    image: gstream-gate-proxy:latest
+    container_name: grpc-proxy-app
+    restart: unless-stopped
+
+    # 網絡配置
+    ports:
+      - "8080:8080"   # HTTP API 端口
+      - "50051:50051" # gRPC 代理端口
+
+    # 環境變數
+    environment:
+      # Spring Boot 配置
+      - SPRING_PROFILES_ACTIVE=production
+      - SERVER_PORT=8080
+      - GRPC_PROXY_SERVER_PORT=50051
+
+      # 數據庫配置
+      - DB_USERNAME=gstreamgate
+      - DB_PASSWORD=SecurePassword123!
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/gstreamgate
+
+      # JVM 優化
+      - JAVA_OPTS=-server -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC
+
+      # Undertow 優化
+      - SERVER_UNDERTOW_THREADS_IO=8
+      - SERVER_UNDERTOW_THREADS_WORKER=64
+      - SERVER_UNDERTOW_BUFFER_SIZE=16384
+      - SERVER_UNDERTOW_DIRECT_BUFFERS=true
+
+      # 監控配置
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,metrics,prometheus,info
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=when-authorized
+
+      # 時區設置
+      - TZ=Asia/Taipei
+
+    # 資源限制
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'
+
+    # 卷映射
+    volumes:
+      - grpc-proxy-logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+
+    # 健康檢查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # 依賴服務
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # 網絡
+    networks:
+      - grpc-proxy-network
+
+  # ==========================================
+  # PostgreSQL 數據庫
+  # ==========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: grpc-proxy-postgres
+    restart: unless-stopped
+
+    # 環境變數
+    environment:
+      - POSTGRES_DB=gstreamgate
+      - POSTGRES_USER=gstreamgate
+      - POSTGRES_PASSWORD=SecurePassword123!
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+      - TZ=Asia/Taipei
+
+    # 端口
+    ports:
+      - "5432:5432"
+
+    # 卷映射
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+      - /etc/localtime:/etc/localtime:ro
+
+    # 健康檢查
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gstreamgate -d gstreamgate"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    # 網絡
+    networks:
+      - grpc-proxy-network
+
+    # 資源限制
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # ==========================================
+  # Prometheus 監控
+  # ==========================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: grpc-proxy-prometheus
+    restart: unless-stopped
+
+    # 端口
+    ports:
+      - "9191:9191"
+
+    # 配置文件
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+      - /etc/localtime:/etc/localtime:ro
+
+    # 啟動參數
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+
+    # 網絡
+    networks:
+      - grpc-proxy-network
+
+    # 依賴服務
+    depends_on:
+      - grpc-proxy
+
+  # ==========================================
+  # Grafana 可視化
+  # ==========================================
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grpc-proxy-grafana
+    restart: unless-stopped
+
+    # 端口
+    ports:
+      - "3000:3000"
+
+    # 環境變數
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=AdminPassword123!
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      - TZ=Asia/Taipei
+
+    # 卷映射
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - /etc/localtime:/etc/localtime:ro
+
+    # 網絡
+    networks:
+      - grpc-proxy-network
+
+    # 依賴服務
+    depends_on:
+      - prometheus
+
+  # ==========================================
+  # Redis 緩存（可選）
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: grpc-proxy-redis
+    restart: unless-stopped
+    profiles: ["cache"]  # 可選服務
+
+    # 端口
+    ports:
+      - "6379:6379"
+
+    # 配置
+    command: redis-server --appendonly yes --requirepass RedisPassword123!
+
+    # 卷映射
+    volumes:
+      - redis-data:/data
+      - /etc/localtime:/etc/localtime:ro
+
+    # 健康檢查
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "RedisPassword123!", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+    # 網絡
+    networks:
+      - grpc-proxy-network
+
+  # ==========================================
+  # Nginx 反向代理（可選）
+  # ==========================================
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: grpc-proxy-nginx
+    restart: unless-stopped
+    profiles: ["loadbalancer"]  # 可選服務
+
+    # 端口
+    ports:
+      - "80:80"
+      - "443:443"
+
+    # 配置文件
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx-logs:/var/log/nginx
+      - /etc/localtime:/etc/localtime:ro
+
+    # 網絡
+    networks:
+      - grpc-proxy-network
+
+    # 依賴服務
+    depends_on:
+      - grpc-proxy
+
+# ==========================================
+# 卷定義
+# ==========================================
+volumes:
+  postgres-data:
+    driver: local
+  grpc-proxy-logs:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  redis-data:
+    driver: local
+  nginx-logs:
+    driver: local
+
+# ==========================================
+# 網絡定義
+# ==========================================
+networks:
+  grpc-proxy-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
