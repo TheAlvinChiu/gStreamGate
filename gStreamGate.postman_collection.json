@@ -1,0 +1,213 @@
+{
+	"info": {
+		"_postman_id": "8ed065aa-b493-47c1-96cf-63dae5d74753",
+		"name": "gStreamGate",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "45145883",
+		"_collection_link": "https://alvinchiu-5306001.postman.co/workspace/Alvin-Chiu's-Workspace~cd3a4f78-ea76-461c-8102-cc6373a2d364/collection/45145883-8ed065aa-b493-47c1-96cf-63dae5d74753?action=share&source=collection_link&creator=45145883"
+	},
+	"item": [
+		{
+			"name": "health",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		},
+		{
+			"name": "metrics",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		},
+		{
+			"name": "listProxys",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://{{baseUrl}}/api/proxy",
+					"protocol": "http",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"proxy"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "prometheus",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		},
+		{
+			"name": "proxyEnabled",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		},
+		{
+			"name": "getOneProxy",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://{{baseUrl}}/api/proxy/{id}",
+					"protocol": "http",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"proxy",
+						"{id}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "createProxy",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"serviceName\": \"user-service\",\r\n  \"proxyHostName\": \"api.example.com\",\r\n  \"targetHostName\": \"backend.internal\",\r\n  \"targetPort\": 9090,\r\n  \"connectTimeoutMs\": 5000,\r\n  \"sendTimeoutMs\": 10000,\r\n  \"readTimeoutMs\": 30000,\r\n  \"secureMode\": \"AUTO\",\r\n  \"serverCertContent\": null,\r\n  \"serverKeyContent\": null,\r\n  \"autoTrustUpstreamCerts\": \"N\",\r\n  \"trustedCertsContent\": null,\r\n  \"enable\": \"Y\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://{{baseUrl}}/api/proxy",
+					"protocol": "http",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"proxy"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "updateProxy",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"serviceName\": \"user-service\",\r\n  \"proxyHostName\": \"api.example.com\",\r\n  \"targetHostName\": \"backend.internal\",\r\n  \"targetPort\": 9090,\r\n  \"connectTimeoutMs\": 5000,\r\n  \"sendTimeoutMs\": 10000,\r\n  \"readTimeoutMs\": 30000,\r\n  \"secureMode\": \"AUTO\",\r\n  \"serverCertContent\": null,\r\n  \"serverKeyContent\": null,\r\n  \"autoTrustUpstreamCerts\": \"N\",\r\n  \"trustedCertsContent\": null,\r\n  \"enable\": \"Y\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://{{baseUrl}}/api/proxy/{id}",
+					"protocol": "http",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"proxy",
+						"{id}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "patchProxyStatus",
+			"request": {
+				"method": "PATCH",
+				"header": [],
+				"url": {
+					"raw": "http://{{baseUrl}}api/proxy/{id}/status?enable={boolean}",
+					"protocol": "http",
+					"host": [
+						"{{baseUrl}}api"
+					],
+					"path": [
+						"proxy",
+						"{id}",
+						"status"
+					],
+					"query": [
+						{
+							"key": "enable",
+							"value": "{boolean}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "deleteProxy",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "http://{{baseUrl}}/api/proxy/{id}",
+					"protocol": "http",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"proxy",
+						"{id}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "refreshPrxoy",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		},
+		{
+			"name": "getActiveProxy",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		}
+	]
+}

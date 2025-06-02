@@ -1,0 +1,319 @@
+# ==========================================
+# Spring Boot 應用配置 - 使用 Undertow 版本
+# ==========================================
+
+spring:
+  application:
+    name: gstream-gate-proxy
+  profiles:
+    active: development
+
+  # 完全禁用 Spring Security（僅開發環境）
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.actuate.autoconfigure.security.servlet.ManagementWebSecurityAutoConfiguration
+
+  # 數據庫配置
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+
+  # SQL 初始化配置
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
+      continue-on-error: true
+
+  # JPA 配置
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: none  # 不讓 Hibernate 自動創建表，使用 schema.sql
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        # 不要全域引用標識符，避免大小寫問題
+        globally_quoted_identifiers: false
+
+  # H2 控制台（開發環境）
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# ==========================================
+# gRPC Proxy 配置
+# ==========================================
+grpc:
+  proxy:
+    server:
+      port: 9092
+    timeout:
+      connectTimeoutSeconds: 10
+      sendTimeoutSeconds: 5
+      readTimeoutSeconds: 30
+    tls:
+      enabled: false
+      autoTrustUpstreamCertificates: false
+
+# ==========================================
+# 服務器配置 - Undertow 優化
+# ==========================================
+server:
+  port: 5888
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain,application/javascript,text/css
+    min-response-size: 1024
+  http2:
+    enabled: true
+  # Undertow 特定配置
+  undertow:
+    # 線程配置
+    threads:
+      io: 8                    # IO 線程數，通常設為 CPU 核心數
+      worker: 64               # 工作線程數
+    # 緩衝區配置
+    buffer-size: 16384         # 16KB 緩衝區大小
+    direct-buffers: true       # 使用直接緩衝區（堆外內存）
+    # 連接配置
+    max-http-post-size: 20MB   # 最大 HTTP POST 大小
+    max-parameters: 1000       # 最大參數數量
+    max-headers: 200           # 最大 HTTP 頭數量
+    max-cookies: 200           # 最大 Cookie 數量
+    # 性能優化
+    eager-filter-init: true    # 預先初始化過濾器
+    # 訪問日志（可選）
+    accesslog:
+      enabled: false
+      dir: logs
+      prefix: access_log
+      suffix: .log
+      pattern: '%t %a "%r" %s (%D ms)'
+
+# ==========================================
+# Actuator 監控配置
+# ==========================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+      base-path: /actuator
+    enabled-by-default: true
+
+  endpoint:
+    health:
+      enabled: true
+      show-details: always
+      show-components: always
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+    info:
+      enabled: true
+    env:
+      enabled: true
+    configprops:
+      enabled: true
+    mappings:
+      enabled: true
+
+  # Metrics 配置
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+        step: 10s
+      simple:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        grpc.proxy.request.duration: true
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+        grpc.proxy.request.duration: 0.5, 0.95, 0.99
+    tags:
+      application: ${spring.application.name}
+      environment: ${spring.profiles.active}
+
+  # 健康檢查配置
+  health:
+    circuitbreakers:
+      enabled: true
+    diskspace:
+      enabled: true
+      threshold: 1073741824  # 1GB in bytes
+
+# ==========================================
+# 日志配置
+# ==========================================
+logging:
+  level:
+    root: INFO
+    io.github.alvinchiu.gstreamgate: DEBUG
+    io.github.alvinchiu.gstreamgate.server: INFO
+    io.github.alvinchiu.gstreamgate.manager: INFO
+    io.github.alvinchiu.gstreamgate.handler: DEBUG
+    io.github.alvinchiu.gstreamgate.pool: INFO
+    io.github.alvinchiu.gstreamgate.circuit: INFO
+    io.github.alvinchiu.gstreamgate.metrics: INFO
+    io.github.alvinchiu.gstreamgate.optimization: INFO
+    org.springframework.boot: INFO
+    org.springframework.web: INFO
+    io.grpc: WARN
+    io.grpc.netty: WARN
+    io.netty: WARN
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    # Undertow 相關日志
+    io.undertow: INFO
+    org.xnio: WARN
+
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
+
+  file:
+    name: logs/gstream-gate.log
+    max-size: 100MB
+    max-history: 30
+
+# ==========================================
+# 自定義應用配置
+# ==========================================
+app:
+  # 連接池配置
+  connectionPool:
+    minConnectionsPerTarget: 2
+    maxConnectionsPerTarget: 8
+    connectionWarmupTimeoutSeconds: 30
+
+  # 熔斷器配置
+  circuitBreaker:
+    failureThreshold: 5
+    failureRateThreshold: 0.5
+    minimumRequests: 10
+    waitDurationSeconds: 60
+    slidingWindowSize: 100
+
+  # 內存優化配置
+  memory:
+    enableObjectPools: true
+    enableResponseCache: true
+    cacheMaxSize: 1000
+    cacheExpireMinutes: 5
+    memoryMonitorIntervalSeconds: 30
+
+  # Metrics 配置
+  metrics:
+    enableDetailedMetrics: true
+    enableMethodLevelMetrics: true
+    enableMemoryMetrics: true
+    reportIntervalSeconds: 60
+
+---
+# ==========================================
+# 開發環境配置
+# ==========================================
+spring:
+  config:
+    activate:
+      on-profile: development
+
+  datasource:
+    url: jdbc:h2:mem:devdb
+
+  jpa:
+    show-sql: true
+
+# Undertow 開發環境配置
+server:
+  undertow:
+    threads:
+      io: 4
+      worker: 32
+    accesslog:
+      enabled: true
+
+logging:
+  level:
+    io.github.alvinchiu.gstreamgate: DEBUG
+    io.undertow: DEBUG
+
+---
+# ==========================================
+# 生產環境配置
+# ==========================================
+spring:
+  config:
+    activate:
+      on-profile: production
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/gstreamgate
+    username: ${DB_USERNAME:gstreamgate}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+# 生產環境 Undertow 配置
+server:
+  undertow:
+    threads:
+      io: 16               # 生產環境增加 IO 線程
+      worker: 128          # 生產環境增加工作線程
+    buffer-size: 32768     # 生產環境使用更大的緩衝區
+    # 安全配置
+    max-http-post-size: 10MB
+    max-parameters: 500
+    max-headers: 100
+    # 訪問日志
+    accesslog:
+      enabled: true
+      pattern: '%t %a "%r" %s %b "%{i,Referer}" "%{i,User-Agent}" (%D ms)'
+
+# 生產環境日志配置
+logging:
+  level:
+    root: WARN
+    io.github.alvinchiu.gstreamgate: INFO
+    io.github.alvinchiu.gstreamgate.server: INFO
+    io.github.alvinchiu.gstreamgate.manager: INFO
+    io.undertow: WARN
+
+# 生產環境監控配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# 生產環境優化配置
+app:
+  connectionPool:
+    maxConnectionsPerTarget: 16
+  circuitBreaker:
+    waitDurationSeconds: 120
+  memory:
+    cacheMaxSize: 5000
+    memoryMonitorIntervalSeconds: 60

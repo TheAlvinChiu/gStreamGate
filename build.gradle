@@ -1,0 +1,439 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.0'  // 保持最新版本
+    id 'io.spring.dependency-management' version '1.1.7'
+    id 'jacoco' // 代碼覆蓋率
+    id 'org.owasp.dependencycheck' version '10.0.4'  // CVE 安全掃描
+}
+
+group = 'io.github.alvinchiu'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    sourceCompatibility = '21'
+    targetCompatibility = '21'
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+    all {
+        // 排除易受攻擊的舊版本依賴
+        exclude group: 'org.apache.logging.log4j', module: 'log4j-core'
+        exclude group: 'org.apache.logging.log4j', module: 'log4j-to-slf4j'
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    // 版本管理 - 升級到與 Spring Boot 3.5.0 兼容的版本
+    springBootVersion = '3.5.0'                     // 保持最新版本
+    grpcVersion = '1.68.1'                           // 最新穩定版本
+    guavaVersion = '33.3.1-jre'                      // 最新版本
+    commonsLang3Version = '3.17.0'                   // 最新版本
+    h2Version = '2.3.232'                            // 最新版本
+
+    // Logging - 升級到與 Spring Boot 3.5.0 兼容的版本
+    slf4jVersion = '2.0.16'                          // 最新版本，支持 StatusPrinter2
+    logbackVersion = '1.5.12'                        // 最新版本，包含 StatusPrinter2
+    janinoVersion = '3.1.12'                         // 穩定版本
+
+    // 優化組件版本 - 最新穩定版本
+    micrometerVersion = '1.13.6'                     // 最新版本
+    nettyVersion = '4.1.115.Final'                   // 最新版本
+    commonsPool2Version = '2.12.0'
+    resilience4jVersion = '2.2.0'                    // 最新版本
+    undertowVersion = '2.3.18.Final'                 // 最新版本
+
+    // 測試相關版本 - 最新穩定版本
+    junitVersion = '5.11.3'                          // 最新版本
+    awaitilityVersion = '4.2.2'
+    testcontainersVersion = '1.20.4'                 // 最新版本
+
+    // 安全相關版本 - 最新穩定版本
+    jacksonVersion = '2.18.1'                        // 最新版本
+    postgresqlVersion = '42.7.4'                     // 最新版本
+    snakeyamlVersion = '2.3'                         // 最新版本
+}
+
+dependencies {
+    // ========== Spring Boot 核心 - 排除 Tomcat，使用 Undertow ==========
+    implementation 'org.springframework.boot:spring-boot-starter'
+
+    // Web starter 排除 Tomcat
+    implementation('org.springframework.boot:spring-boot-starter-web') {
+        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-tomcat'
+    }
+
+    // 添加 Undertow 作為 Web 服務器
+    implementation 'org.springframework.boot:spring-boot-starter-undertow'
+
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // Spring Boot 配置處理器
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // ========== gRPC - 使用最新版本 ==========
+    implementation "io.grpc:grpc-netty-shaded:${grpcVersion}"
+    implementation "io.grpc:grpc-protobuf:${grpcVersion}"
+    implementation "io.grpc:grpc-stub:${grpcVersion}"
+    implementation "io.grpc:grpc-core:${grpcVersion}"
+
+    // ========== Security ==========
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // ========== Database ==========
+    implementation "com.h2database:h2:${h2Version}"
+    runtimeOnly "org.postgresql:postgresql:${postgresqlVersion}"
+    implementation 'com.zaxxer:HikariCP'
+
+    // ========== Utility ==========
+    implementation "org.apache.commons:commons-lang3:${commonsLang3Version}"
+    implementation "com.google.guava:guava:${guavaVersion}"
+    implementation 'commons-io:commons-io:2.16.1'
+
+    // ========== 安全的 YAML 處理器 ==========
+    implementation "org.yaml:snakeyaml:${snakeyamlVersion}"
+
+    // ========== Logging - 明確指定升級版本 ==========
+    implementation "org.slf4j:slf4j-api:${slf4jVersion}"
+    implementation "ch.qos.logback:logback-classic:${logbackVersion}"
+    implementation "ch.qos.logback:logback-core:${logbackVersion}"
+    implementation "org.codehaus.janino:janino:${janinoVersion}"
+
+    // ========== Jackson - 使用最新版本 ==========
+    implementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
+    implementation "com.fasterxml.jackson.core:jackson-core:${jacksonVersion}"
+    implementation "com.fasterxml.jackson.core:jackson-annotations:${jacksonVersion}"
+    implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${jacksonVersion}"
+
+    // ========== 監控和健康檢查 ==========
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // ========== Micrometer Metrics 系統 ==========
+    implementation "io.micrometer:micrometer-core:${micrometerVersion}"
+    implementation "io.micrometer:micrometer-registry-prometheus:${micrometerVersion}"
+    implementation "io.micrometer:micrometer-registry-jmx:${micrometerVersion}"
+
+    // ========== Apache Commons Pool2 ==========
+    implementation "org.apache.commons:commons-pool2:${commonsPool2Version}"
+
+    // ========== Netty ==========
+    implementation "io.netty:netty-buffer:${nettyVersion}"
+    implementation "io.netty:netty-transport:${nettyVersion}"
+    implementation "io.netty:netty-handler:${nettyVersion}"
+    implementation "io.netty:netty-codec-http2:${nettyVersion}"
+
+    // ========== Resilience4j ==========
+    implementation "io.github.resilience4j:resilience4j-spring-boot3:${resilience4jVersion}"
+    implementation "io.github.resilience4j:resilience4j-circuitbreaker:${resilience4jVersion}"
+
+    // ========== Undertow 額外配置支持 ==========
+    implementation "io.undertow:undertow-core:${undertowVersion}"
+    implementation "io.undertow:undertow-servlet:${undertowVersion}"
+
+    // ========== 測試依賴項 - 使用最新版本 ==========
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation "io.grpc:grpc-testing:${grpcVersion}"
+
+    // 測試支持
+    testImplementation "org.awaitility:awaitility:${awaitilityVersion}"
+    testImplementation "io.micrometer:micrometer-test:${micrometerVersion}"
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
+
+    // Mockito 版本由 Spring Boot 管理
+    testImplementation 'org.mockito:mockito-core'
+    testImplementation 'org.mockito:mockito-junit-jupiter'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "io.grpc:grpc-bom:${grpcVersion}"
+        mavenBom "io.netty:netty-bom:${nettyVersion}"
+        mavenBom "io.micrometer:micrometer-bom:${micrometerVersion}"
+        mavenBom "org.testcontainers:testcontainers-bom:${testcontainersVersion}"
+        mavenBom "com.fasterxml.jackson:jackson-bom:${jacksonVersion}"
+        mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
+    }
+
+    // 強制使用升級版本，覆蓋 Spring Boot 的默認版本
+    dependencies {
+        dependency "ch.qos.logback:logback-classic:${logbackVersion}"
+        dependency "ch.qos.logback:logback-core:${logbackVersion}"
+        dependency "org.slf4j:slf4j-api:${slf4jVersion}"
+        dependency "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
+        dependency "com.fasterxml.jackson.core:jackson-core:${jacksonVersion}"
+        dependency "com.fasterxml.jackson.core:jackson-annotations:${jacksonVersion}"
+        dependency "io.netty:netty-buffer:${nettyVersion}"
+        dependency "io.netty:netty-transport:${nettyVersion}"
+        dependency "io.netty:netty-handler:${nettyVersion}"
+        dependency "io.netty:netty-codec-http2:${nettyVersion}"
+    }
+}
+
+// ========== CVE 安全掃描配置 ==========
+dependencyCheck {
+    format = 'ALL'
+    outputDirectory = "${buildDir}/reports/dependency-check"
+    failBuildOnCVSS = 7.0
+    skipConfigurations = ['compileClasspath', 'testCompileClasspath']
+    skipTestGroups = true
+    suppressionFile = 'dependency-check-suppressions.xml'
+
+    analyzers {
+        nodeEnabled = false
+        nuspecEnabled = false
+        assemblyEnabled = false
+        msbuildEnabled = false
+        cocoapodsEnabled = false
+        swiftEnabled = false
+        bundleAuditEnabled = false
+        pyDistributionEnabled = false
+        pyPackageEnabled = false
+        rubygemsEnabled = false
+        cmakeEnabled = false
+        autoconfEnabled = false
+        composerEnabled = false
+        cpanEnabled = false
+        dartEnabled = false
+        golangDepEnabled = false
+        golangModEnabled = false
+    }
+}
+
+// ========== 測試配置 ==========
+tasks.named('test') {
+    useJUnitPlatform()
+
+    jvmArgs = [
+            '-Xms256m',
+            '-Xmx1024m',
+            '-XX:+UseG1GC',
+            '-XX:MaxGCPauseMillis=100',
+            '-XX:+UseStringDeduplication',
+            '-Dio.netty.allocator.type=pooled',
+            '-Dio.netty.noPreferDirect=false',
+            '-Dio.undertow.disable-file-system-watcher=true',
+            '--add-opens=java.base/java.nio=ALL-UNNAMED',
+            '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED'
+    ]
+
+    systemProperty 'junit.jupiter.execution.parallel.enabled', 'true'
+    systemProperty 'junit.jupiter.execution.parallel.mode.default', 'concurrent'
+
+    testLogging {
+        events "passed", "skipped", "failed"
+        showStandardStreams = false
+        exceptionFormat = 'full'
+    }
+
+    finalizedBy jacocoTestReport
+}
+
+// ========== JaCoCo 代碼覆蓋率配置 ==========
+jacoco {
+    toolVersion = "0.8.12"
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                    '**/config/**',
+                    '**/entity/**',
+                    '**/dto/**',
+                    '**/*Application.class',
+                    '**/GStreamGateApplication.class'
+            ])
+        }))
+    }
+}
+
+// ========== Spring Boot 打包配置 ==========
+jar {
+    enabled = false
+    archiveClassifier = ''
+}
+
+bootJar {
+    enabled = true
+    archiveClassifier = ''
+
+    manifest {
+        attributes(
+                'Implementation-Title': project.name,
+                'Implementation-Version': project.version,
+                'Built-By': System.getProperty('user.name'),
+                'Built-Date': new Date().format('yyyy-MM-dd HH:mm:ss'),
+                'Built-JDK': System.getProperty('java.version'),
+                'Built-Gradle': gradle.gradleVersion,
+                'Web-Server': 'Undertow',
+                'Spring-Boot-Version': springBootVersion,
+                'Logback-Version': logbackVersion
+        )
+    }
+}
+
+// ========== 自定義任務 ==========
+
+// 驗證依賴版本
+task verifyDependencies {
+    group = 'verification'
+    description = 'Verify all dependencies can be resolved and check Logback version'
+
+    doLast {
+        configurations.compileClasspath.resolve()
+        configurations.testCompileClasspath.resolve()
+        println "✅ All dependencies resolved successfully!"
+
+        // 打印關鍵依賴版本
+        println "\n📦 Key Dependencies (Latest Versions):"
+        println "Spring Boot: ${springBootVersion}"
+        println "SLF4J: ${slf4jVersion}"
+        println "Logback: ${logbackVersion} (includes StatusPrinter2)"
+        println "gRPC: ${grpcVersion}"
+        println "Undertow: ${undertowVersion}"
+        println "Netty: ${nettyVersion}"
+        println "Micrometer: ${micrometerVersion}"
+        println "Jackson: ${jacksonVersion}"
+        println "JUnit: ${junitVersion}"
+
+        // 驗證 Logback 版本
+        def logbackClassic = configurations.compileClasspath.resolvedConfiguration.resolvedArtifacts
+                .find { it.moduleVersion.id.name == 'logback-classic' }
+        if (logbackClassic) {
+            println "\n✅ Logback Classic resolved version: ${logbackClassic.moduleVersion.id.version}"
+            if (logbackClassic.moduleVersion.id.version.startsWith('1.5')) {
+                println "✅ Logback 1.5.x includes StatusPrinter2 class"
+            } else {
+                println "⚠️  Warning: Logback version might not include StatusPrinter2"
+            }
+        }
+    }
+}
+
+// 檢查依賴衝突
+task checkDependencyConflicts {
+    group = 'verification'
+    description = 'Check for dependency conflicts'
+
+    doLast {
+        println "🔍 Checking for dependency conflicts..."
+        configurations.compileClasspath.resolvedConfiguration.resolvedArtifacts.forEach { artifact ->
+            if (artifact.moduleVersion.id.name.contains('logback') ||
+                    artifact.moduleVersion.id.name.contains('slf4j')) {
+                println "Logging dependency: ${artifact.moduleVersion.id.group}:${artifact.moduleVersion.id.name}:${artifact.moduleVersion.id.version}"
+            }
+        }
+    }
+}
+
+// 創建 Undertow 優化的啟動腳本
+task createStartScript {
+    doLast {
+        def startScript = file("${buildDir}/libs/start.sh")
+        startScript.parentFile.mkdirs()
+        startScript.text = '''#!/bin/bash
+# gRPC Proxy Undertow 優化啟動腳本 (Spring Boot 3.5.0)
+
+JVM_OPTS="-server \\
+    -Xms512m \\
+    -Xmx2048m \\
+    -XX:+UseG1GC \\
+    -XX:MaxGCPauseMillis=200 \\
+    -XX:+UseStringDeduplication \\
+    -Dio.netty.allocator.type=pooled \\
+    -Dio.undertow.disable-file-system-watcher=true \\
+    -Djava.awt.headless=true \\
+    --add-opens=java.base/java.nio=ALL-UNNAMED"
+
+UNDERTOW_OPTS="--server.undertow.threads.io=8 \\
+    --server.undertow.threads.worker=64 \\
+    --server.undertow.buffer-size=16384 \\
+    --server.undertow.direct-buffers=true"
+
+APP_OPTS="--spring.profiles.active=production \\
+    --server.port=8080 \\
+    --grpc.proxy.server.port=50051 \\
+    $UNDERTOW_OPTS"
+
+JAR_FILE=$(ls *.jar | head -n 1)
+
+echo "Starting gRPC Proxy with Undertow (Spring Boot 3.5.0)..."
+echo "JAR: $JAR_FILE"
+echo "Logback Version: ''' + logbackVersion + '''"
+
+exec java $JVM_OPTS -jar $JAR_FILE $APP_OPTS
+'''
+        startScript.setExecutable(true)
+        println "Created start script: ${startScript.absolutePath}"
+    }
+}
+
+// 開發模式運行
+task runDev(type: JavaExec) {
+    group = 'application'
+    description = 'Run the application in development mode with Undertow'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'io.github.alvinchiu.gstreamgate.GStreamGateApplication'
+
+    jvmArgs = [
+            '-Dspring.profiles.active=development',
+            '-Dspring.devtools.restart.enabled=true',
+            '-Dio.undertow.disable-file-system-watcher=true',
+            '--add-opens=java.base/java.nio=ALL-UNNAMED'
+    ]
+
+    systemProperty 'server.undertow.threads.io', '4'
+    systemProperty 'server.undertow.threads.worker', '16'
+}
+
+// CVE 安全掃描任務
+task securityScan {
+    group = 'verification'
+    description = 'Run CVE security scan'
+    dependsOn dependencyCheckAnalyze
+}
+
+// 打印構建信息
+task buildInfo {
+    doLast {
+        println """
+        ==========================================
+        gRPC Proxy Build Information (Latest)
+        ==========================================
+        Project: ${project.name}
+        Version: ${project.version}
+        Java: ${java.sourceCompatibility}
+        Gradle: ${gradle.gradleVersion}
+        Spring Boot: ${springBootVersion} (Latest)
+        Logback: ${logbackVersion} (Includes StatusPrinter2)
+        SLF4J: ${slf4jVersion}
+        Web Server: Undertow ${undertowVersion}
+        gRPC: ${grpcVersion}
+        ==========================================
+        ✅ Using latest stable versions
+        ✅ Logback 1.5.x includes StatusPrinter2
+        ✅ CVE security scanning enabled
+        ✅ Undertow optimization configured
+        ==========================================
+        """
+    }
+}
+
+// 構建前驗證依賴
+build.dependsOn verifyDependencies, checkDependencyConflicts, buildInfo
+bootJar.finalizedBy createStartScript
