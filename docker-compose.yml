@@ -21,14 +21,14 @@ services:
     # 網絡配置
     ports:
       - "8080:8080"   # HTTP API 端口
-      - "50051:50051" # gRPC 代理端口
+      - "9191:9191" # gRPC 代理端口
 
     # 環境變數
     environment:
       # Spring Boot 配置
       - SPRING_PROFILES_ACTIVE=production
       - SERVER_PORT=8080
-      - GRPC_PROXY_SERVER_PORT=50051
+      - GRPC_PROXY_SERVER_PORT=9191
 
       # 數據庫配置
       - DB_USERNAME=gstreamgate
