@@ -19,6 +19,9 @@ ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
 COPY gradle/ gradle/
 COPY gradlew build.gradle settings.gradle ./
 
+# 設置 gradlew 執行權限
+RUN chmod +x ./gradlew
+
 # 預下載依賴（緩存優化）
 RUN ./gradlew dependencies --no-daemon --quiet
 
@@ -99,7 +102,7 @@ ENV GRPC_OPTS="-Dio.grpc.netty.shaded.io.grpc.netty.useCustomAllocator=true"
 # Spring Boot 配置
 ENV SPRING_OPTS="--spring.profiles.active=production \
     --server.port=8080 \
-    --grpc.proxy.server.port=9091 \
+    --grpc.proxy.server.port=9191 \
     --server.undertow.threads.io=8 \
     --server.undertow.threads.worker=64 \
     --server.undertow.buffer-size=16384 \
@@ -117,7 +120,7 @@ ENV JVM_ARGS="$JAVA_OPTS $NETTY_OPTS $UNDERTOW_OPTS $GRPC_OPTS"
 ENV APP_ARGS="$SPRING_OPTS $HEALTH_CHECK_OPTS"
 
 # 暴露端口
-EXPOSE 8080 9091
+EXPOSE 8080 9191
 
 # 健康檢查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
@@ -135,10 +138,10 @@ CMD ["sh", "-c", "exec java $JVM_ARGS -jar /app/app.jar $APP_ARGS"]
 # ==========================================
 # Metadata
 # ==========================================
-LABEL maintainer="Alvin Chiu <thealvinchiu@gmail.com>" \
-      org.opencontainers.image.title="gRPC Proxy Gateway" \
+LABEL maintainer="Alvin Chiu <thealvin@gmail.com>" \
+      org.opencontainers.image.title="gStreamGate" \
       org.opencontainers.image.description="High-performance gRPC proxy with Undertow and Spring Boot 3.5.0" \
       org.opencontainers.image.version="1.0.0" \
       org.opencontainers.image.vendor="AlvinChiu" \
-      org.opencontainers.image.source="https://github.com/alvinchiu/gstream-gate-proxy" \
+      org.opencontainers.image.source="https://github.com/TheAlvinChiu/gStreamGate.git" \
       org.opencontainers.image.documentation="https://github.com/alvinchiu/gstream-gate-proxy/README.md"

@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS grpc_proxy_map (
                                          create_user            VARCHAR(100)        DEFAULT 'SYSTEM',      -- 創建用戶
     update_date_time       TIMESTAMP WITH TIME ZONE,                  -- 更新日期
                                          update_user            VARCHAR(100),                              -- 更新用戶
-    version                INTEGER             DEFAULT 1              -- 版本號
+    version                BIGINT              DEFAULT 1              -- 版本號 (修復為 BIGINT)
     );
 
 -- ==========================================

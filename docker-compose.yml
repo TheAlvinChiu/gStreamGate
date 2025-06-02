@@ -18,17 +18,17 @@ services:
     container_name: grpc-proxy-app
     restart: unless-stopped
 
-    # 網絡配置
+    # 網絡配置 - 更新端口映射
     ports:
       - "8080:8080"   # HTTP API 端口
-      - "9191:9191" # gRPC 代理端口
+      - "9191:50051"  # gRPC 代理端口映射到 9191
 
     # 環境變數
     environment:
       # Spring Boot 配置
       - SPRING_PROFILES_ACTIVE=production
       - SERVER_PORT=8080
-      - GRPC_PROXY_SERVER_PORT=9191
+      - GRPC_PROXY_SERVER_PORT=50051  # 容器內部仍使用 50051
 
       # 數據庫配置
       - DB_USERNAME=gstreamgate
@@ -139,9 +139,9 @@ services:
     container_name: grpc-proxy-prometheus
     restart: unless-stopped
 
-    # 端口
+    # 端口 - 恢復標準端口
     ports:
-      - "9191:9191"
+      - "9090:9090"
 
     # 配置文件
     volumes:
@@ -159,13 +159,22 @@ services:
       - '--web.enable-lifecycle'
       - '--web.enable-admin-api'
 
+    # 健康檢查
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
     # 網絡
     networks:
       - grpc-proxy-network
 
     # 依賴服務
     depends_on:
-      - grpc-proxy
+      grpc-proxy:
+        condition: service_healthy
 
   # ==========================================
   # Grafana 可視化
