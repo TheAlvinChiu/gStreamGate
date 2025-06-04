@@ -14,8 +14,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 /**
- * 熔斷器管理系統
- * 為每個上游服務提供熔斷保護，防止級聯故障
+ * Circuit breaker management system.
+ * Provides protection for each upstream service to avoid cascading failures.
  */
 @Component
 public class CircuitBreakerManager {
@@ -24,14 +24,14 @@ public class CircuitBreakerManager {
     private final Map<String, CircuitBreaker> circuitBreakers = new ConcurrentHashMap<>();
 
     /**
-     * 獲取指定服務的熔斷器
+     * Retrieve the circuit breaker for the specified service.
      */
     public CircuitBreaker getCircuitBreaker(String serviceName) {
         return circuitBreakers.computeIfAbsent(serviceName, this::createCircuitBreaker);
     }
 
     /**
-     * 創建新的熔斷器
+     * Create a new circuit breaker.
      */
     private CircuitBreaker createCircuitBreaker(String serviceName) {
         CircuitBreaker breaker = new CircuitBreaker(serviceName);
@@ -40,7 +40,7 @@ public class CircuitBreakerManager {
     }
 
     /**
-     * 執行受熔斷器保護的操作
+     * Execute an operation protected by a circuit breaker.
      */
     public <T> T execute(String serviceName, Supplier<T> operation) throws CircuitBreakerOpenException {
         CircuitBreaker breaker = getCircuitBreaker(serviceName);
@@ -48,7 +48,7 @@ public class CircuitBreakerManager {
     }
 
     /**
-     * 獲取所有熔斷器的狀態
+     * Get the status of all circuit breakers.
      */
     public Map<String, CircuitBreakerStatus> getAllCircuitBreakerStatus() {
         Map<String, CircuitBreakerStatus> statusMap = new ConcurrentHashMap<>();
@@ -57,7 +57,7 @@ public class CircuitBreakerManager {
     }
 
     /**
-     * 手動重置熔斷器
+     * Manually reset a circuit breaker.
      */
     public void resetCircuitBreaker(String serviceName) {
         CircuitBreaker breaker = circuitBreakers.get(serviceName);
@@ -68,17 +68,17 @@ public class CircuitBreakerManager {
     }
 
     /**
-     * 熔斷器實現
+     * Circuit breaker implementation.
      */
     public static class CircuitBreaker {
         private static final Logger logger = LoggerFactory.getLogger(CircuitBreaker.class);
 
-        // 配置參數
-        private static final int DEFAULT_FAILURE_THRESHOLD = 5;           // 失敗閾值
-        private static final double DEFAULT_FAILURE_RATE_THRESHOLD = 0.5; // 失敗率閾值 (50%)
-        private static final int DEFAULT_MINIMUM_REQUESTS = 10;           // 最小請求數
-        private static final Duration DEFAULT_WAIT_DURATION = Duration.ofSeconds(60); // 等待時間
-        private static final int DEFAULT_SLIDING_WINDOW_SIZE = 100;       // 滑動窗口大小
+        // Configuration parameters
+        private static final int DEFAULT_FAILURE_THRESHOLD = 5;           // Failure threshold
+        private static final double DEFAULT_FAILURE_RATE_THRESHOLD = 0.5; // Failure rate threshold (50%)
+        private static final int DEFAULT_MINIMUM_REQUESTS = 10;           // Minimum request count
+        private static final Duration DEFAULT_WAIT_DURATION = Duration.ofSeconds(60); // Wait duration
+        private static final int DEFAULT_SLIDING_WINDOW_SIZE = 100;       // Sliding window size
 
         private final String serviceName;
         private final AtomicReference<State> state = new AtomicReference<>(State.CLOSED);
@@ -87,7 +87,7 @@ public class CircuitBreakerManager {
         private final AtomicLong lastFailureTime = new AtomicLong(0);
         private final AtomicLong stateTransitionTime = new AtomicLong(System.currentTimeMillis());
 
-        // 滑動窗口統計
+        // Sliding window statistics
         private final SlidingWindow slidingWindow = new SlidingWindow(DEFAULT_SLIDING_WINDOW_SIZE);
 
         public CircuitBreaker(String serviceName) {
@@ -95,7 +95,7 @@ public class CircuitBreakerManager {
         }
 
         /**
-         * 執行受保護的操作
+         * Execute the protected operation.
          */
         public <T> T execute(Supplier<T> operation) throws CircuitBreakerOpenException {
             State currentState = state.get();
@@ -111,10 +111,10 @@ public class CircuitBreakerManager {
                     }
                     break;
                 case HALF_OPEN:
-                    // 在半開狀態下允許少量請求通過
+                    // Allow a small number of requests in HALF_OPEN state
                     break;
                 case CLOSED:
-                    // 正常狀態，允許所有請求
+                    // Normal state, all requests are allowed
                     break;
             }
 
@@ -129,7 +129,7 @@ public class CircuitBreakerManager {
         }
 
         /**
-         * 處理成功情況
+         * Handle a successful execution.
          */
         private void onSuccess() {
             slidingWindow.recordSuccess();
@@ -138,7 +138,7 @@ public class CircuitBreakerManager {
             State currentState = state.get();
 
             if (currentState == State.HALF_OPEN) {
-                // 半開狀態下成功，嘗試關閉熔斷器
+                // Success in HALF_OPEN state, attempt to close the circuit
                 if (state.compareAndSet(State.HALF_OPEN, State.CLOSED)) {
                     reset();
                     logger.info("Circuit breaker for {} transitioned from HALF_OPEN to CLOSED", serviceName);
@@ -148,7 +148,7 @@ public class CircuitBreakerManager {
         }
 
         /**
-         * 處理失敗情況
+         * Handle a failed execution.
          */
         private void onFailure() {
             slidingWindow.recordFailure();
@@ -158,13 +158,13 @@ public class CircuitBreakerManager {
             State currentState = state.get();
 
             if (currentState == State.HALF_OPEN) {
-                // 半開狀態下失敗，立即打開熔斷器
+                // Failure in HALF_OPEN state, immediately open the circuit
                 if (state.compareAndSet(State.HALF_OPEN, State.OPEN)) {
                     logger.warn("Circuit breaker for {} transitioned from HALF_OPEN to OPEN due to failure", serviceName);
                     stateTransitionTime.set(System.currentTimeMillis());
                 }
             } else if (currentState == State.CLOSED) {
-                // 檢查是否需要打開熔斷器
+                // Check whether the circuit should be opened
                 if (shouldOpenCircuit()) {
                     if (state.compareAndSet(State.CLOSED, State.OPEN)) {
                         logger.warn("Circuit breaker for {} transitioned from CLOSED to OPEN. " +
@@ -177,17 +177,17 @@ public class CircuitBreakerManager {
         }
 
         /**
-         * 判斷是否應該打開熔斷器
+         * Determine whether the circuit should be opened.
          */
         private boolean shouldOpenCircuit() {
             int totalRequests = slidingWindow.getTotalRequests();
 
-            // 請求數量不足，不打開熔斷器
+            // Do not open the circuit if the request count is too low
             if (totalRequests < DEFAULT_MINIMUM_REQUESTS) {
                 return false;
             }
 
-            // 檢查失敗率
+            // Check the failure rate
             double failureRate = slidingWindow.getFailureRate();
             boolean shouldOpen = failureRate >= DEFAULT_FAILURE_RATE_THRESHOLD;
 
@@ -200,7 +200,7 @@ public class CircuitBreakerManager {
         }
 
         /**
-         * 判斷是否應該嘗試重置
+         * Determine whether a reset attempt should be made.
          */
         private boolean shouldAttemptReset() {
             long currentTime = System.currentTimeMillis();
@@ -209,7 +209,7 @@ public class CircuitBreakerManager {
         }
 
         /**
-         * 重置熔斷器
+         * Reset the circuit breaker.
          */
         public void reset() {
             failureCount.set(0);
@@ -222,7 +222,7 @@ public class CircuitBreakerManager {
         }
 
         /**
-         * 獲取熔斷器狀態
+         * Get the status of this circuit breaker.
          */
         public CircuitBreakerStatus getStatus() {
             return new CircuitBreakerStatus(
@@ -239,7 +239,7 @@ public class CircuitBreakerManager {
     }
 
     /**
-     * 滑動窗口統計實現
+     * Implementation of sliding window statistics.
      */
     private static class SlidingWindow {
         private final int windowSize;
@@ -255,37 +255,37 @@ public class CircuitBreakerManager {
         }
 
         /**
-         * 記錄成功
+         * Record a successful call.
          */
         public void recordSuccess() {
             record(true);
         }
 
         /**
-         * 記錄失敗
+         * Record a failed call.
          */
         public void recordFailure() {
             record(false);
         }
 
         /**
-         * 記錄請求結果
+         * Record the result of a request.
          */
         private void record(boolean success) {
             synchronized (lock) {
                 int index = currentIndex.getAndIncrement() % windowSize;
 
-                // 如果窗口已滿，需要移除舊的記錄
+                // If the window is full, remove the oldest record
                 if (totalRequests.get() >= windowSize) {
                     boolean oldValue = window[index];
-                    if (!oldValue) { // 舊記錄是失敗
+                    if (!oldValue) { // the old record was a failure
                         failureRequests.decrementAndGet();
                     }
                 } else {
                     totalRequests.incrementAndGet();
                 }
 
-                // 添加新記錄
+                // Add the new record
                 window[index] = success;
                 if (!success) {
                     failureRequests.incrementAndGet();
@@ -294,7 +294,7 @@ public class CircuitBreakerManager {
         }
 
         /**
-         * 獲取失敗率
+         * Get the failure rate.
          */
         public double getFailureRate() {
             int total = totalRequests.get();
@@ -305,21 +305,21 @@ public class CircuitBreakerManager {
         }
 
         /**
-         * 獲取總請求數
+         * Get the total number of requests.
          */
         public int getTotalRequests() {
             return totalRequests.get();
         }
 
         /**
-         * 獲取失敗請求數
+         * Get the number of failed requests.
          */
         public int getFailureRequests() {
             return failureRequests.get();
         }
 
         /**
-         * 重置窗口
+         * Reset the window.
          */
         public void reset() {
             synchronized (lock) {
@@ -334,16 +334,16 @@ public class CircuitBreakerManager {
     }
 
     /**
-     * 熔斷器狀態枚舉
+     * Circuit breaker state enumeration.
      */
     public enum State {
-        CLOSED,    // 關閉狀態，正常處理請求
-        OPEN,      // 打開狀態，拒絕所有請求
-        HALF_OPEN  // 半開狀態，允許少量請求通過測試
+        CLOSED,    // Closed state, process requests normally
+        OPEN,      // Open state, reject all requests
+        HALF_OPEN  // Half-open state, allow a small number of test requests
     }
 
     /**
-     * 熔斷器狀態信息
+     * Circuit breaker status information.
      */
     public static class CircuitBreakerStatus {
         private final String serviceName;
@@ -387,7 +387,7 @@ public class CircuitBreakerManager {
     }
 
     /**
-     * 熔斷器打開異常
+     * Exception thrown when the circuit breaker is open.
      */
     public static class CircuitBreakerOpenException extends RuntimeException {
         public CircuitBreakerOpenException(String message) {
