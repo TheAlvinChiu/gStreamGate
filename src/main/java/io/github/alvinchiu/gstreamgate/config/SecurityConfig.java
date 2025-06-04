@@ -11,8 +11,8 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 
 /**
- * Spring Security 配置
- * 允許訪問 Actuator 監控端點，同時保護其他端點
+ * Spring Security configuration.
+ * Allows access to Actuator monitoring endpoints while protecting others.
  */
 @Configuration
 @EnableWebSecurity
@@ -28,18 +28,18 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authz -> {
                     logger.info("Setting up authorization rules");
                     authz
-                            // 允許訪問所有 Actuator 端點（開發/測試環境）
+                            // Allow access to all Actuator endpoints (development/test environments)
                             .requestMatchers(EndpointRequest.toAnyEndpoint()).permitAll()
-                            // 明確允許常用的 actuator 路徑
+                            // Explicitly allow common actuator paths
                             .requestMatchers("/actuator/**").permitAll()
-                            // 允許訪問 H2 控制台（開發環境）
+                            // Allow access to the H2 console (development environment)
                             .requestMatchers("/h2-console/**").permitAll()
-                            // 允許訪問 API 端點（根據需要調整）
+                            // Allow access to API endpoints (adjust as needed)
                             .requestMatchers("/api/**").permitAll()
-                            // 其他所有請求需要認證
+                            // All other requests require authentication
                             .anyRequest().authenticated();
                 })
-                // 禁用 CSRF（對於 API 和監控端點）
+                // Disable CSRF for API and actuator endpoints
                 .csrf(csrf -> {
                     logger.info("Disabling CSRF for API and actuator endpoints");
                     csrf
@@ -47,13 +47,13 @@ public class SecurityConfig {
                             .ignoringRequestMatchers("/h2-console/**")
                             .ignoringRequestMatchers("/api/**");
                 })
-                // 配置 Headers - 使用新的 API
+                // Configure headers using the new API
                 .headers(headers -> {
                     logger.info("Configuring security headers");
                     headers
-                            // 允許 H2 控制台在 iframe 中顯示 - 使用新的 API
+                            // Allow the H2 console to be displayed in an iframe - using the new API
                             .frameOptions(frameOptions -> frameOptions.sameOrigin())
-                            // 可選：添加其他安全頭
+                            // Optional: add additional security headers
                             .contentTypeOptions(contentTypeOptions -> {})
                             .httpStrictTransportSecurity(hstsConfig -> hstsConfig
                                     .maxAgeInSeconds(31536000)
@@ -61,7 +61,7 @@ public class SecurityConfig {
                             .referrerPolicy(referrerPolicy ->
                                     referrerPolicy.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN));
                 })
-                // 禁用基本認證（完全開放 actuator 端點）
+                // Disable basic authentication (actuator endpoints are fully open)
                 .httpBasic(httpBasic -> httpBasic.disable());
 
         logger.info("Security Filter Chain configured successfully");
