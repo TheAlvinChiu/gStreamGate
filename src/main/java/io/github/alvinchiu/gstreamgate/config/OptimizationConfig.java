@@ -17,15 +17,15 @@ import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.EventListener;
 
 /**
- * 優化組件配置類
- * 配置和初始化所有性能優化組件
+ * Optimization components configuration class.
+ * Configures and initializes all performance optimization components.
  */
 @Configuration
 public class OptimizationConfig {
     private static final Logger logger = LoggerFactory.getLogger(OptimizationConfig.class);
 
     /**
-     * 配置 MeterRegistry（如果沒有其他配置）
+     * Configure the {@link MeterRegistry} if no other registry is defined.
      */
     @Bean
     @ConditionalOnMissingBean
@@ -35,7 +35,7 @@ public class OptimizationConfig {
     }
 
     /**
-     * 配置連接池管理器
+     * Configure the connection pool manager.
      */
     @Bean
     public io.github.alvinchiu.gstreamgate.pool.ConnectionPoolManager connectionPoolManager() {
@@ -44,7 +44,7 @@ public class OptimizationConfig {
     }
 
     /**
-     * 配置熔斷器管理器
+     * Configure the circuit breaker manager.
      */
     @Bean
     public CircuitBreakerManager circuitBreakerManager() {
@@ -53,7 +53,7 @@ public class OptimizationConfig {
     }
 
     /**
-     * 配置 Metrics 收集器
+     * Configure the metrics collector.
      */
     @Bean
     public ProxyMetrics proxyMetrics(MeterRegistry meterRegistry) {
@@ -62,7 +62,7 @@ public class OptimizationConfig {
     }
 
     /**
-     * 配置內存優化器
+     * Configure the memory optimizer.
      */
     @Bean
     public MemoryOptimizer memoryOptimizer() {
@@ -71,18 +71,19 @@ public class OptimizationConfig {
     }
 
     /**
-     * 組件注入器 - 在 Spring 上下文刷新後注入優化組件
+     * Component injector - inject optimization components after the Spring
+     * context is refreshed.
      */
     @EventListener
     public void onContextRefreshed(ContextRefreshedEvent event) {
         logger.info("Injecting optimization components into handlers");
 
-        // 獲取所有優化組件
+        // Retrieve all optimization components
         CircuitBreakerManager circuitBreakerManager = event.getApplicationContext().getBean(CircuitBreakerManager.class);
         ProxyMetrics proxyMetrics = event.getApplicationContext().getBean(ProxyMetrics.class);
         MemoryOptimizer memoryOptimizer = event.getApplicationContext().getBean(MemoryOptimizer.class);
 
-        // 嘗試獲取自適應組件（可能不存在）
+        // Attempt to retrieve adaptive components (may not exist)
         AdaptiveTimeoutManager timeoutManager = null;
         SmartFlowControlManager flowControlManager = null;
 
@@ -94,7 +95,7 @@ public class OptimizationConfig {
             logger.info("Adaptive components not found, will use basic optimization only");
         }
 
-        // 注入到優化的處理器中
+        // Inject into the optimized handlers
         OptimizedProxyServerCallHandler.injectOptimizedComponents(
                 circuitBreakerManager,
                 proxyMetrics,
