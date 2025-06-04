@@ -13,8 +13,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
 
 /**
- * gRPC Proxy 的 Metrics 收集系統 - 完全修復所有 API 問題
- * 收集性能指標、錯誤率、連接狀態等關鍵監控數據
+ * Metrics collection system for the gRPC proxy with all API issues fixed.
+ * Collects performance metrics, error rates, connection states and other
+ * critical monitoring data.
  */
 @Component
 public class ProxyMetrics {
@@ -22,19 +23,19 @@ public class ProxyMetrics {
 
     private final MeterRegistry meterRegistry;
 
-    // 核心指標
+    // Core metrics
     private final Timer requestTimer;
     private final Counter successCounter;
     private final Counter errorCounter;
     private final Counter connectionCounter;
 
-    // 詳細統計
+    // Detailed statistics
     private final Map<String, Timer> methodTimers = new ConcurrentHashMap<>();
     private final Map<String, Counter> methodCounters = new ConcurrentHashMap<>();
     private final Map<String, LongAdder> activeConnectionsByTarget = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> lastRequestTimestamp = new ConcurrentHashMap<>();
 
-    // 內部統計
+    // Internal statistics
     private final AtomicLong totalActiveConnections = new AtomicLong(0);
     private final AtomicLong totalRequestsProcessed = new AtomicLong(0);
     private final AtomicLong totalBytesTransferred = new AtomicLong(0);
@@ -43,7 +44,7 @@ public class ProxyMetrics {
     public ProxyMetrics(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
 
-        // 初始化核心指標 - 修復 API 調用
+        // Initialize core metrics - fixed API calls
         this.requestTimer = Timer.builder("grpc.proxy.request.duration")
                 .description("gRPC proxy request processing time")
                 .register(meterRegistry);
@@ -60,35 +61,35 @@ public class ProxyMetrics {
                 .description("Total gRPC proxy connections created")
                 .register(meterRegistry);
 
-        // 注册 Gauge - 使用 MeterRegistry 直接注册
+        // Register gauges directly with the MeterRegistry
         registerGauges();
 
         logger.info("ProxyMetrics initialized with {} registry", meterRegistry.getClass().getSimpleName());
     }
 
     /**
-     * 注册 Gauge 指標 - 使用 MeterRegistry 直接注册
+     * Register Gauge metrics directly with the MeterRegistry
      */
     private void registerGauges() {
-        // 活躍連接數 Gauge
+        // Active connection gauge
         meterRegistry.gauge("grpc.proxy.connections.active",
                 Tags.of("type", "active"),
                 totalActiveConnections,
                 AtomicLong::get);
 
-        // 內存使用 Gauge
+        // Memory usage gauge
         meterRegistry.gauge("grpc.proxy.memory.usage",
                 Tags.of("type", "heap"),
                 this,
                 ProxyMetrics::getMemoryUsage);
 
-        // 總請求數 Gauge
+        // Total request gauge
         meterRegistry.gauge("grpc.proxy.requests.total",
                 Tags.of("type", "processed"),
                 totalRequestsProcessed,
                 AtomicLong::get);
 
-        // 總傳輸字節數 Gauge
+        // Total bytes transferred gauge
         meterRegistry.gauge("grpc.proxy.bytes.transferred.total",
                 Tags.of("type", "total"),
                 totalBytesTransferred,
@@ -96,39 +97,39 @@ public class ProxyMetrics {
     }
 
     /**
-     * 記錄請求處理時間和結果
+     * Record the request processing time and result
      */
     public void recordRequest(String method, String target, Duration duration, boolean success, long bytesTransferred) {
-        // 記錄總體指標
+        // Record overall metrics
         requestTimer.record(duration);
         totalRequestsProcessed.incrementAndGet();
         totalBytesTransferred.addAndGet(bytesTransferred);
 
-        // 修復 Counter.increment() API 調用
+        // Fixed Counter.increment() API usage
         if (success) {
-            // 創建帶標籤的 Counter 並增加
+            // Create a labeled Counter and increment
             Counter.builder("grpc.proxy.requests.success.tagged")
                     .description("Successful gRPC proxy requests with tags")
                     .tags("method", method, "target", target)
                     .register(meterRegistry)
                     .increment();
-            // 同時增加總的成功計數器
+            // Also increment the global success counter
             successCounter.increment();
         } else {
-            // 創建帶標籤的 Counter 並增加
+            // Create a labeled Counter and increment
             Counter.builder("grpc.proxy.requests.error.tagged")
                     .description("Failed gRPC proxy requests with tags")
                     .tags("method", method, "target", target)
                     .register(meterRegistry)
                     .increment();
-            // 同時增加總的錯誤計數器
+            // Also increment the global error counter
             errorCounter.increment();
         }
 
-        // 記錄按方法分類的指標
+        // Record method-specific metrics
         recordMethodMetrics(method, target, duration, success);
 
-        // 更新最後請求時間
+        // Update the last request time
         lastRequestTimestamp.put(target, new AtomicLong(System.currentTimeMillis()));
 
         logger.debug("Recorded request: method={}, target={}, duration={}ms, success={}, bytes={}",
@@ -136,12 +137,12 @@ public class ProxyMetrics {
     }
 
     /**
-     * 記錄按方法分類的指標
+     * Record metrics categorized by method
      */
     private void recordMethodMetrics(String method, String target, Duration duration, boolean success) {
         String methodKey = method + ":" + target;
 
-        // 方法級別的計時器
+        // Method-level timer
         Timer methodTimer = methodTimers.computeIfAbsent(methodKey, key ->
                 Timer.builder("grpc.proxy.method.duration")
                         .description("Method-specific request processing time")
@@ -150,7 +151,7 @@ public class ProxyMetrics {
         );
         methodTimer.record(duration);
 
-        // 方法級別的計數器
+        // Method-level counter
         String counterKey = methodKey + ":" + (success ? "success" : "error");
         Counter methodCounter = methodCounters.computeIfAbsent(counterKey, key ->
                 Counter.builder("grpc.proxy.method.requests")
@@ -162,10 +163,10 @@ public class ProxyMetrics {
     }
 
     /**
-     * 記錄連接事件
+     * Record connection events
      */
     public void recordConnection(String target, boolean connected) {
-        // 修復 Counter.increment() 調用
+        // Fixed Counter.increment() call
         Counter.builder("grpc.proxy.connections.events")
                 .description("Connection events")
                 .tags("target", target, "action", connected ? "connect" : "disconnect")
@@ -186,7 +187,7 @@ public class ProxyMetrics {
             logger.debug("Connection closed to target: {}, total: {}", target, getTotalActiveConnections());
         }
 
-        // 更新目標特定的 Gauge
+        // Update the target-specific gauge
         meterRegistry.gauge("grpc.proxy.connections.by.target",
                 Tags.of("target", target),
                 targetConnections,
@@ -194,7 +195,7 @@ public class ProxyMetrics {
     }
 
     /**
-     * 記錄錯誤事件
+     * Record error events
      */
     public void recordError(String target, String errorType, String errorMessage) {
         Counter.builder("grpc.proxy.errors")
@@ -207,7 +208,7 @@ public class ProxyMetrics {
     }
 
     /**
-     * 記錄流量統計
+     * Record traffic statistics
      */
     public void recordTraffic(String target, long inboundBytes, long outboundBytes) {
         if (inboundBytes > 0) {
@@ -232,10 +233,10 @@ public class ProxyMetrics {
     }
 
     /**
-     * 記錄響應時間百分位數
+     * Record response time percentiles
      */
     public void recordResponseTimePercentiles(String target, Duration p50, Duration p95, Duration p99) {
-        // 使用 MeterRegistry.gauge() 直接注册
+        // Directly register using MeterRegistry.gauge()
         meterRegistry.gauge("grpc.proxy.response.time.p50",
                 Tags.of("target", target), p50.toMillis());
         meterRegistry.gauge("grpc.proxy.response.time.p95",
@@ -245,14 +246,14 @@ public class ProxyMetrics {
     }
 
     /**
-     * 創建自定義計時器
+     * Create a custom timer
      */
     public Timer.Sample startTimer() {
         return Timer.start(meterRegistry);
     }
 
     /**
-     * 停止計時器並記錄
+     * Stop the timer and record
      */
     public void stopTimer(Timer.Sample sample, String name, String... tagKeyValues) {
         Timer timer = Timer.builder(name)
@@ -262,7 +263,7 @@ public class ProxyMetrics {
     }
 
     /**
-     * 增加計數器
+     * Increment a counter
      */
     public void incrementCounter(String name, String... tagKeyValues) {
         Counter.builder(name)
@@ -272,7 +273,7 @@ public class ProxyMetrics {
     }
 
     /**
-     * 增加計數器指定數量
+     * Increment a counter by a specific amount
      */
     public void incrementCounter(String name, double amount, String... tagKeyValues) {
         Counter.builder(name)
@@ -282,21 +283,21 @@ public class ProxyMetrics {
     }
 
     /**
-     * 記錄 Gauge 值
+     * Record a gauge value
      */
     public void recordGauge(String name, double value, String... tagKeyValues) {
         meterRegistry.gauge(name, Tags.of(tagKeyValues), value);
     }
 
     /**
-     * 獲取總活躍連接數
+     * Get total active connections
      */
     public long getTotalActiveConnections() {
         return totalActiveConnections.get();
     }
 
     /**
-     * 獲取指定目標的活躍連接數
+     * Get active connections for the specified target
      */
     public long getActiveConnectionsForTarget(String target) {
         LongAdder adder = activeConnectionsByTarget.get(target);
@@ -304,7 +305,7 @@ public class ProxyMetrics {
     }
 
     /**
-     * 獲取內存使用量
+     * Get memory usage
      */
     public double getMemoryUsage() {
         Runtime runtime = Runtime.getRuntime();
@@ -312,21 +313,21 @@ public class ProxyMetrics {
     }
 
     /**
-     * 獲取總處理請求數
+     * Get total processed requests
      */
     public long getTotalRequestsProcessed() {
         return totalRequestsProcessed.get();
     }
 
     /**
-     * 獲取總傳輸字節數
+     * Get total transferred bytes
      */
     public long getTotalBytesTransferred() {
         return totalBytesTransferred.get();
     }
 
     /**
-     * 獲取目標服務的最後請求時間
+     * Get the last request time for a target
      */
     public long getLastRequestTimestamp(String target) {
         AtomicLong timestamp = lastRequestTimestamp.get(target);
@@ -334,7 +335,7 @@ public class ProxyMetrics {
     }
 
     /**
-     * 獲取錯誤率
+     * Get the error rate
      */
     public double getErrorRate() {
         double totalSuccess = successCounter.count();
@@ -345,21 +346,21 @@ public class ProxyMetrics {
     }
 
     /**
-     * 獲取平均響應時間
+     * Get the average response time
      */
     public double getAverageResponseTime() {
         return requestTimer.mean(java.util.concurrent.TimeUnit.MILLISECONDS);
     }
 
     /**
-     * 獲取 MeterRegistry（用於高級用法）
+     * Get the MeterRegistry (for advanced usage)
      */
     public MeterRegistry getMeterRegistry() {
         return meterRegistry;
     }
 
     /**
-     * 獲取綜合統計信息
+     * Get aggregated statistics
      */
     public MetricsSummary getSummary() {
         return new MetricsSummary(
@@ -369,12 +370,12 @@ public class ProxyMetrics {
                 getAverageResponseTime(),
                 getTotalBytesTransferred(),
                 (long) getMemoryUsage(),
-                activeConnectionsByTarget.size() // 目標數量
+                activeConnectionsByTarget.size() // number of targets
         );
     }
 
     /**
-     * 重置統計信息（謹慎使用）
+     * Reset metrics (use with caution)
      */
     public void reset() {
         logger.warn("Resetting all metrics - this should only be done for testing!");
@@ -386,13 +387,13 @@ public class ProxyMetrics {
         activeConnectionsByTarget.clear();
         lastRequestTimestamp.clear();
 
-        // 清理緩存的計時器和計數器
+        // Clear cached timers and counters
         methodTimers.clear();
         methodCounters.clear();
     }
 
     /**
-     * Metrics 綜合摘要
+     * Metrics summary
      */
     public static class MetricsSummary {
         private final long totalRequests;

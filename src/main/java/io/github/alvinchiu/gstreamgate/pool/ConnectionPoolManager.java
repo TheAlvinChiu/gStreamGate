@@ -15,30 +15,31 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * 管理 gRPC 連接池的組件
- * 為每個目標服務維護多個連接以提高性能和可靠性
+ * Component for managing gRPC connection pools.
+ * Maintains multiple connections for each target service to improve
+ * performance and reliability.
  */
 @Component
 public class ConnectionPoolManager {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionPoolManager.class);
 
-    // 連接池配置
+    // Connection pool configuration
     private static final int MIN_CONNECTIONS_PER_TARGET = 2;
     private static final int MAX_CONNECTIONS_PER_TARGET = 8;
     private static final int CONNECTION_WARMUP_TIMEOUT_SECONDS = 30;
 
-    // 存儲每個目標的連接池
+    // Connection pools for each target
     private final Map<String, ChannelPool> channelPools = new ConcurrentHashMap<>();
 
     /**
-     * 獲取到指定目標的連接
+     * Get a connection to the specified target.
      *
-     * @param targetKey 目標服務的唯一標識
-     * @param hostname 目標主機名
-     * @param port 目標端口
-     * @param useTls 是否使用 TLS
-     * @param sslContext SSL 上下文（如果使用 TLS）
-     * @return 可用的 ManagedChannel
+     * @param targetKey unique identifier of the target service
+     * @param hostname  target host name
+     * @param port      target port
+     * @param useTls    whether to use TLS
+     * @param sslContext SSL context when using TLS
+     * @return available ManagedChannel
      */
     public ManagedChannel getChannel(String targetKey, String hostname, int port, boolean useTls, SslContext sslContext) {
         ChannelPool pool = channelPools.computeIfAbsent(targetKey,
@@ -48,9 +49,9 @@ public class ConnectionPoolManager {
     }
 
     /**
-     * 移除指定目標的連接池
+     * Remove the connection pool for the given target.
      *
-     * @param targetKey 目標服務的唯一標識
+     * @param targetKey unique identifier of the target service
      */
     public void removeChannelPool(String targetKey) {
         ChannelPool pool = channelPools.remove(targetKey);
@@ -61,10 +62,10 @@ public class ConnectionPoolManager {
     }
 
     /**
-     * 獲取連接池統計信息
+     * Get statistics of a connection pool.
      *
-     * @param targetKey 目標服務的唯一標識
-     * @return 連接池統計信息
+     * @param targetKey unique identifier of the target service
+     * @return pool statistics
      */
     public PoolStatistics getPoolStatistics(String targetKey) {
         ChannelPool pool = channelPools.get(targetKey);
@@ -72,9 +73,9 @@ public class ConnectionPoolManager {
     }
 
     /**
-     * 獲取所有連接池的統計信息
+     * Get statistics of all connection pools.
      *
-     * @return 所有連接池的統計信息
+     * @return statistics of all pools
      */
     public Map<String, PoolStatistics> getAllPoolStatistics() {
         Map<String, PoolStatistics> stats = new ConcurrentHashMap<>();
@@ -83,7 +84,7 @@ public class ConnectionPoolManager {
     }
 
     /**
-     * 關閉所有連接池
+     * Shut down all connection pools
      */
     public void shutdown() {
         logger.info("Shutting down all connection pools...");
@@ -93,7 +94,7 @@ public class ConnectionPoolManager {
     }
 
     /**
-     * 單個目標服務的連接池實現
+     * Connection pool implementation for a single target service
      */
     private static class ChannelPool {
         private final Logger logger = LoggerFactory.getLogger(ChannelPool.class);
@@ -120,12 +121,12 @@ public class ConnectionPoolManager {
             this.sslContext = sslContext;
             this.channels = new ManagedChannel[MAX_CONNECTIONS_PER_TARGET];
 
-            // 異步初始化連接池
+            // Initialize the pool asynchronously
             initializePool();
         }
 
         /**
-         * 初始化連接池
+         * Initialize the pool
          */
         private void initializePool() {
             if (initLock.tryLock()) {
@@ -133,7 +134,7 @@ public class ConnectionPoolManager {
                     if (!initialized && !shutdown) {
                         logger.debug("Initializing connection pool for target: {}", targetKey);
 
-                        // 先創建最小數量的連接
+                        // Create the minimum number of connections first
                         for (int i = 0; i < MIN_CONNECTIONS_PER_TARGET; i++) {
                             channels[i] = createChannel();
                         }
@@ -149,14 +150,14 @@ public class ConnectionPoolManager {
         }
 
         /**
-         * 創建新的 ManagedChannel
+         * Create a new ManagedChannel
          */
         private ManagedChannel createChannel() {
             try {
                 ManagedChannel channel;
 
                 if (useTls && sslContext != null) {
-                    // 創建 TLS 連接
+                    // Create a TLS connection
                     channel = NettyChannelBuilder
                             .forAddress(hostname, port)
                             .sslContext(sslContext)
@@ -167,7 +168,7 @@ public class ConnectionPoolManager {
                             .flowControlWindow(2 * 1024 * 1024)
                             .build();
                 } else {
-                    // 創建 plaintext 連接
+                    // Create a plaintext connection
                     channel = ManagedChannelBuilder
                             .forAddress(hostname, port)
                             .usePlaintext()
@@ -188,24 +189,24 @@ public class ConnectionPoolManager {
         }
 
         /**
-         * 獲取可用的連接
+         * Get an available connection
          */
         public ManagedChannel getChannel() {
             if (shutdown) {
                 throw new IllegalStateException("Connection pool for " + targetKey + " has been shut down");
             }
 
-            // 確保連接池已初始化
+            // Ensure the pool is initialized
             if (!initialized) {
                 initializePool();
             }
 
             totalRequests.incrementAndGet();
 
-            // 負載均衡：輪詢選擇連接
+            // Load balancing: round-robin selection
             int index = Math.abs(currentIndex.getAndIncrement() % MAX_CONNECTIONS_PER_TARGET);
 
-            // 如果該位置沒有連接，嘗試創建新連接
+            // If there is no connection at this index, try to create one
             if (channels[index] == null) {
                 synchronized (this) {
                     if (channels[index] == null && !shutdown) {
@@ -217,10 +218,10 @@ public class ConnectionPoolManager {
 
             ManagedChannel channel = channels[index];
 
-            // 檢查連接狀態，如果連接已關閉，創建新連接
+            // Check channel state and create a new one if closed
             if (channel != null && (channel.isShutdown() || channel.isTerminated())) {
                 synchronized (this) {
-                    if (channels[index] == channel) { // 雙重檢查
+                    if (channels[index] == channel) { // double check
                         channels[index] = createChannel();
                         logger.debug("Replaced dead channel at index {} for target: {}", index, targetKey);
                         channel = channels[index];
@@ -236,7 +237,7 @@ public class ConnectionPoolManager {
         }
 
         /**
-         * 獲取連接池統計信息
+         * Get connection pool statistics
          */
         public PoolStatistics getStatistics() {
             int activeConnections = 0;
@@ -263,7 +264,7 @@ public class ConnectionPoolManager {
         }
 
         /**
-         * 關閉連接池
+         * Shut down the connection pool
          */
         public void shutdown() {
             if (shutdown) {
@@ -299,7 +300,7 @@ public class ConnectionPoolManager {
     }
 
     /**
-     * 連接池統計信息
+     * Connection pool statistics
      */
     public static class PoolStatistics {
         private final String targetKey;
