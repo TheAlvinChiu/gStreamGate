@@ -1,6 +1,4 @@
 import io.github.alvinchiu.gstreamgate.marshaller.PassthroughMarshaller;
-import io.grpc.Status;
-import io.grpc.StatusException;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -45,34 +43,25 @@ class PassthroughMarshallerTest {
     }
 
     @Test
-    void parse_ioExceptionWrapsInRuntimeException() {
+    void parse_doesNotReadInputStream() {
         InputStream failing = new InputStream() {
             @Override
             public int read() throws IOException {
                 throw new IOException("boom");
             }
         };
-        RuntimeException ex = assertThrows(RuntimeException.class, () -> marshaller.parse(failing));
-        assertStatusException(ex, "IO error parsing input stream: boom");
+        assertSame(failing, marshaller.parse(failing));
     }
 
     @Test
-    void stream_ioExceptionWrapsInRuntimeException() {
+    void stream_doesNotReadInputStream() {
         InputStream failing = new InputStream() {
             @Override
             public int read() throws IOException {
                 throw new IOException("fail");
             }
         };
-        RuntimeException ex = assertThrows(RuntimeException.class, () -> marshaller.stream(failing));
-        assertStatusException(ex, "IO error streaming input stream: fail");
-    }
-
-    private void assertStatusException(RuntimeException ex, String expectedDescription) {
-        assertTrue(ex.getCause() instanceof StatusException);
-        StatusException se = (StatusException) ex.getCause();
-        assertEquals(Status.Code.INTERNAL, se.getStatus().getCode());
-        assertEquals(expectedDescription, se.getStatus().getDescription());
-        assertTrue(se.getCause() instanceof IOException);
+        assertSame(failing, marshaller.stream(failing));
     }
 }
+
