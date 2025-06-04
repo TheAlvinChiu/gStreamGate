@@ -26,40 +26,41 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 內存優化系統
- * 提供對象池、緩存管理、內存監控等功能以減少 GC 壓力
+ * Memory optimization system.
+ * Provides object pools, cache management and memory monitoring to reduce GC
+ * pressure.
  */
 @Component
 public class MemoryOptimizer {
     private static final Logger logger = LoggerFactory.getLogger(MemoryOptimizer.class);
 
-    // 對象池
+    // Object pools
     private final ObjectPool<ByteArrayOutputStream> byteArrayOutputStreamPool;
     private final ObjectPool<ByteBuffer> byteBufferPool;
     private final ByteBufAllocator byteBufAllocator;
 
-    // 緩存
+    // Caches
     private final Cache<String, ByteBuf> responseCache;
     private final Cache<String, Object> metadataCache;
 
-    // 內存監控
+    // Memory monitoring
     private final ScheduledExecutorService memoryMonitor;
     private final AtomicLong totalAllocatedBytes = new AtomicLong(0);
     private final AtomicLong totalDeallocatedBytes = new AtomicLong(0);
     private final AtomicLong peakMemoryUsage = new AtomicLong(0);
 
     public MemoryOptimizer() {
-        // 初始化對象池
+        // Initialize object pools
         this.byteArrayOutputStreamPool = createByteArrayOutputStreamPool();
         this.byteBufferPool = createByteBufferPool();
         this.byteBufAllocator = PooledByteBufAllocator.DEFAULT;
 
-        // 初始化緩存
+        // Initialize caches
         this.responseCache = CacheBuilder.newBuilder()
                 .maximumSize(1000)
                 .expireAfterWrite(Duration.ofMinutes(5))
                 .removalListener(notification -> {
-                    // 釋放 ByteBuf
+                    // Release ByteBuf
                     if (notification.getValue() instanceof ByteBuf) {
                         ((ByteBuf) notification.getValue()).release();
                     }
@@ -71,7 +72,7 @@ public class MemoryOptimizer {
                 .expireAfterWrite(Duration.ofMinutes(10))
                 .build();
 
-        // 初始化內存監控
+        // Initialize memory monitoring
         this.memoryMonitor = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "memory-monitor");
             t.setDaemon(true);
@@ -83,7 +84,7 @@ public class MemoryOptimizer {
     }
 
     /**
-     * 創建 ByteArrayOutputStream 對象池
+     * Create the ByteArrayOutputStream pool
      */
     private ObjectPool<ByteArrayOutputStream> createByteArrayOutputStreamPool() {
         GenericObjectPoolConfig<ByteArrayOutputStream> config = new GenericObjectPoolConfig<>();
@@ -99,7 +100,7 @@ public class MemoryOptimizer {
     }
 
     /**
-     * 創建 ByteBuffer 對象池
+     * Create the ByteBuffer pool
      */
     private ObjectPool<ByteBuffer> createByteBufferPool() {
         GenericObjectPoolConfig<ByteBuffer> config = new GenericObjectPoolConfig<>();
@@ -115,12 +116,12 @@ public class MemoryOptimizer {
     }
 
     /**
-     * 借用 ByteArrayOutputStream
+     * Borrow a ByteArrayOutputStream
      */
     public ByteArrayOutputStream borrowByteArrayOutputStream() {
         try {
             ByteArrayOutputStream baos = byteArrayOutputStreamPool.borrowObject();
-            baos.reset(); // 重置流
+            baos.reset(); // Reset the stream
             return baos;
         } catch (Exception e) {
             logger.warn("Failed to borrow ByteArrayOutputStream from pool, creating new instance", e);
@@ -129,7 +130,7 @@ public class MemoryOptimizer {
     }
 
     /**
-     * 歸還 ByteArrayOutputStream
+     * Return a ByteArrayOutputStream
      */
     public void returnByteArrayOutputStream(ByteArrayOutputStream baos) {
         try {
@@ -140,12 +141,12 @@ public class MemoryOptimizer {
     }
 
     /**
-     * 借用 ByteBuffer
+     * Borrow a ByteBuffer
      */
     public ByteBuffer borrowByteBuffer() {
         try {
             ByteBuffer buffer = byteBufferPool.borrowObject();
-            buffer.clear(); // 重置緩衝區
+            buffer.clear(); // Reset the buffer
             return buffer;
         } catch (Exception e) {
             logger.warn("Failed to borrow ByteBuffer from pool, creating new instance", e);
@@ -154,7 +155,7 @@ public class MemoryOptimizer {
     }
 
     /**
-     * 歸還 ByteBuffer
+     * Return a ByteBuffer
      */
     public void returnByteBuffer(ByteBuffer buffer) {
         try {
@@ -165,7 +166,7 @@ public class MemoryOptimizer {
     }
 
     /**
-     * 分配 ByteBuf
+     * Allocate a ByteBuf
      */
     public ByteBuf allocateByteBuf(int capacity) {
         ByteBuf buffer = byteBufAllocator.buffer(capacity);
@@ -174,7 +175,7 @@ public class MemoryOptimizer {
     }
 
     /**
-     * 釋放 ByteBuf
+     * Release a ByteBuf
      */
     public void releaseByteBuf(ByteBuf buffer) {
         if (buffer != null && buffer.refCnt() > 0) {
@@ -185,51 +186,51 @@ public class MemoryOptimizer {
     }
 
     /**
-     * 創建零拷貝 ByteBuf
+     * Create a zero-copy ByteBuf
      */
     public ByteBuf createZeroCopyByteBuf(byte[] data) {
         return Unpooled.wrappedBuffer(data);
     }
 
     /**
-     * 緩存響應數據
+     * Cache response data
      */
     public void cacheResponse(String key, ByteBuf response) {
         if (response != null && response.isReadable()) {
-            // 增加引用計數以防止被釋放
+            // Increase reference count to avoid release
             response.retain();
             responseCache.put(key, response);
         }
     }
 
     /**
-     * 獲取緩存的響應數據
+     * Get cached response data
      */
     public ByteBuf getCachedResponse(String key) {
         ByteBuf cached = responseCache.getIfPresent(key);
         if (cached != null && cached.isReadable()) {
-            // 返回副本以避免多線程問題
+            // Return a duplicate to avoid multi-threading issues
             return cached.retainedDuplicate();
         }
         return null;
     }
 
     /**
-     * 緩存元數據
+     * Cache metadata
      */
     public void cacheMetadata(String key, Object metadata) {
         metadataCache.put(key, metadata);
     }
 
     /**
-     * 獲取緩存的元數據
+     * Get cached metadata
      */
     public Object getCachedMetadata(String key) {
         return metadataCache.getIfPresent(key);
     }
 
     /**
-     * 清理緩存
+     * Clean caches
      */
     public void cleanupCaches() {
         logger.debug("Cleaning up caches...");
@@ -238,7 +239,7 @@ public class MemoryOptimizer {
     }
 
     /**
-     * 獲取內存統計信息
+     * Get memory statistics
      */
     public MemoryStatistics getMemoryStatistics() {
         Runtime runtime = Runtime.getRuntime();
@@ -261,7 +262,7 @@ public class MemoryOptimizer {
     }
 
     /**
-     * 開始內存監控
+     * Start memory monitoring
      */
     private void startMemoryMonitoring() {
         memoryMonitor.scheduleAtFixedRate(() -> {
@@ -275,16 +276,16 @@ public class MemoryOptimizer {
     }
 
     /**
-     * 監控內存使用情況
+     * Monitor memory usage
      */
     private void monitorMemoryUsage() {
         Runtime runtime = Runtime.getRuntime();
         long usedMemory = runtime.totalMemory() - runtime.freeMemory();
 
-        // 更新峰值內存使用量
+        // Update peak memory usage
         peakMemoryUsage.updateAndGet(current -> Math.max(current, usedMemory));
 
-        // 檢查內存使用情況
+        // Check memory usage
         long maxMemory = runtime.maxMemory();
         double memoryUsagePercentage = (double) usedMemory / maxMemory * 100;
 
@@ -292,17 +293,17 @@ public class MemoryOptimizer {
             logger.warn("High memory usage detected: {:.2f}% ({} MB / {} MB)",
                     memoryUsagePercentage, usedMemory / 1024 / 1024, maxMemory / 1024 / 1024);
 
-            // 主動清理緩存
+            // Proactively clean caches
             cleanupCaches();
 
-            // 建議 GC
+            // Suggest GC
             if (memoryUsagePercentage > 90) {
                 logger.warn("Critical memory usage, suggesting GC");
                 System.gc();
             }
         }
 
-        // 記錄統計信息
+        // Log statistics
         if (logger.isDebugEnabled()) {
             MemoryStatistics stats = getMemoryStatistics();
             logger.debug("Memory stats: {}", stats);
@@ -310,16 +311,16 @@ public class MemoryOptimizer {
     }
 
     /**
-     * 強制清理內存
+     * Force memory cleanup
      */
     public void forceCleanup() {
         logger.info("Forcing memory cleanup...");
 
-        // 清理緩存
+        // Clear caches
         responseCache.invalidateAll();
         metadataCache.invalidateAll();
 
-        // 清理對象池
+        // Clear object pools
         try {
             byteArrayOutputStreamPool.clear();
             byteBufferPool.clear();
@@ -327,7 +328,7 @@ public class MemoryOptimizer {
             logger.warn("Error clearing object pools", e);
         }
 
-        // 建議 GC
+        // Suggest GC
         System.gc();
 
         logger.info("Memory cleanup completed");
@@ -337,7 +338,7 @@ public class MemoryOptimizer {
     public void shutdown() {
         logger.info("Shutting down MemoryOptimizer...");
 
-        // 停止監控
+        // Stop monitoring
         memoryMonitor.shutdown();
         try {
             if (!memoryMonitor.awaitTermination(5, TimeUnit.SECONDS)) {
@@ -348,10 +349,10 @@ public class MemoryOptimizer {
             Thread.currentThread().interrupt();
         }
 
-        // 清理資源
+        // Clean up resources
         forceCleanup();
 
-        // 關閉對象池
+        // Close object pools
         try {
             byteArrayOutputStreamPool.close();
             byteBufferPool.close();
@@ -363,12 +364,12 @@ public class MemoryOptimizer {
     }
 
     /**
-     * ByteArrayOutputStream 工廠
+     * ByteArrayOutputStream factory
      */
     private static class ByteArrayOutputStreamFactory extends BasePooledObjectFactory<ByteArrayOutputStream> {
         @Override
         public ByteArrayOutputStream create() {
-            return new ByteArrayOutputStream(8192); // 8KB 初始容量
+            return new ByteArrayOutputStream(8192); // 8KB initial capacity
         }
 
         @Override
@@ -378,7 +379,7 @@ public class MemoryOptimizer {
 
         @Override
         public void passivateObject(PooledObject<ByteArrayOutputStream> p) {
-            p.getObject().reset(); // 重置流
+            p.getObject().reset(); // Reset the stream
         }
 
         @Override
@@ -388,12 +389,12 @@ public class MemoryOptimizer {
     }
 
     /**
-     * ByteBuffer 工廠
+     * ByteBuffer factory
      */
     private static class ByteBufferFactory extends BasePooledObjectFactory<ByteBuffer> {
         @Override
         public ByteBuffer create() {
-            return ByteBuffer.allocateDirect(8192); // 8KB 直接緩衝區
+            return ByteBuffer.allocateDirect(8192); // 8KB direct buffer
         }
 
         @Override
@@ -403,7 +404,7 @@ public class MemoryOptimizer {
 
         @Override
         public void passivateObject(PooledObject<ByteBuffer> p) {
-            p.getObject().clear(); // 重置緩衝區
+            p.getObject().clear(); // Reset the buffer
         }
 
         @Override
@@ -413,7 +414,7 @@ public class MemoryOptimizer {
     }
 
     /**
-     * 內存統計信息
+     * Memory statistics
      */
     public static class MemoryStatistics {
         private final long totalMemory;

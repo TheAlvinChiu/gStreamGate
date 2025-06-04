@@ -30,30 +30,31 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * 優化版動態 gRPC 代理管理器
- * 整合了連接池、熔斷器、Metrics 收集和內存優化功能
+ * Optimized dynamic gRPC proxy manager
+ * Integrates connection pooling, circuit breaking, metrics collection and
+ * memory optimization
  */
 @Component
 public class OptimizedDynamicGrpcProxyManager {
     private static final Logger logger = LoggerFactory.getLogger(OptimizedDynamicGrpcProxyManager.class);
 
-    // 核心依賴
+    // Core dependencies
     private final GrpcProxyMapRepository grpcProxyMapRepository;
     private final TlsCertificateManager tlsCertificateManager;
     private final ApplicationEventPublisher eventPublisher;
 
-    // 優化組件
+    // Optimization components
     private final ConnectionPoolManager connectionPoolManager;
     private final CircuitBreakerManager circuitBreakerManager;
     private final ProxyMetrics proxyMetrics;
     private final MemoryOptimizer memoryOptimizer;
 
-    // 狀態管理
+    // State management
     private final Map<String, GrpcProxyMap> activeProxyMappings = new ConcurrentHashMap<>();
     private final Map<String, ProxyStatus> proxyStatusMap = new ConcurrentHashMap<>();
     private HostBasedHandlerRegistry handlerRegistry;
 
-    // 後台任務
+    // Background tasks
     private final ScheduledExecutorService scheduledExecutor = Executors.newScheduledThreadPool(3);
 
     @Autowired
@@ -83,39 +84,39 @@ public class OptimizedDynamicGrpcProxyManager {
             startBackgroundTasks();
         } catch (Exception e) {
             logger.error("Error initializing optimized proxy manager: " + e.getMessage(), e);
-            // 創建空的處理器註冊表以確保應用程序可以啟動
+            // Create an empty handler registry to allow the application to start
             handlerRegistry = new HostBasedHandlerRegistry(new HashMap<>());
         }
     }
 
     /**
-     * 刷新所有代理映射
+     * Refresh all proxy mappings
      */
     public synchronized void refreshProxyMappings() {
         logger.info("Refreshing proxy mappings from database with optimizations");
         Instant startTime = Instant.now();
 
         try {
-            // 獲取所有啟用的代理映射
+            // Retrieve all enabled proxy mappings
             List<GrpcProxyMap> enabledMappings = grpcProxyMapRepository.findByEnable("Y");
             logger.info("Found {} enabled proxy mappings", enabledMappings.size());
 
-            // 移除不再啟用的映射
+            // Remove mappings that are no longer enabled
             Set<String> newProxyHostnames = enabledMappings.stream()
                     .map(GrpcProxyMap::getProxyHostName)
                     .collect(Collectors.toSet());
 
-            // 查找要移除的主機名
+            // Find hostnames that should be removed
             Set<String> hostnamesForRemoval = activeProxyMappings.keySet().stream()
                     .filter(hostname -> !newProxyHostnames.contains(hostname))
                     .collect(Collectors.toSet());
 
-            // 移除不再需要的映射
+            // Remove mappings that are no longer needed
             for (String hostname : hostnamesForRemoval) {
                 removeProxyMapping(hostname, false);
             }
 
-            // 創建新的通道映射
+            // Create new channel mapping
             Map<String, ManagedChannel> newChannelMap = new ConcurrentHashMap<>();
 
             for (GrpcProxyMap mapping : enabledMappings) {
@@ -127,11 +128,11 @@ public class OptimizedDynamicGrpcProxyManager {
                         newChannelMap.put(mapping.getProxyHostName(), channel);
                         activeProxyMappings.put(mapping.getProxyHostName(), mapping);
 
-                        // 初始化代理狀態
+                        // Initialize proxy status
                         proxyStatusMap.put(mapping.getProxyHostName(),
                                 new ProxyStatus(mapping.getProxyHostName(), targetKey, true));
 
-                        // 記錄連接 metrics
+                        // Record connection metrics
                         proxyMetrics.recordConnection(targetKey, true);
 
                         logger.debug("Created optimized channel for: {} -> {}",
@@ -139,22 +140,22 @@ public class OptimizedDynamicGrpcProxyManager {
                     }
                 } catch (Exception e) {
                     logger.error("Failed to create channel for mapping: " + mapping.getProxyHostName(), e);
-                    // 記錄錯誤 metrics
+                    // Record error metrics
                     proxyMetrics.recordError(mapping.getProxyHostName(), "CHANNEL_CREATION_ERROR", e.getMessage());
                 }
             }
 
-            // 創建新的處理器註冊表
+            // Create a new handler registry
             handlerRegistry = new HostBasedHandlerRegistry(newChannelMap);
 
             Duration refreshDuration = Duration.between(startTime, Instant.now());
             logger.info("Proxy mapping refresh completed in {}ms. Active channels: {}",
                     refreshDuration.toMillis(), newChannelMap.size());
 
-            // 發布刷新事件
+            // Publish refresh event
             eventPublisher.publishEvent(ProxyConfigChangedEvent.refreshEvent());
 
-            // 記錄 metrics
+            // Record metrics
             proxyMetrics.recordRequest("REFRESH_MAPPINGS", "SYSTEM", refreshDuration, true, 0);
 
         } catch (Exception e) {
@@ -166,13 +167,13 @@ public class OptimizedDynamicGrpcProxyManager {
     }
 
     /**
-     * 創建優化的通道
+     * Create an optimized channel
      */
     private ManagedChannel createOptimizedChannel(GrpcProxyMap mapping, String targetKey) {
         try {
-            // 使用熔斷器保護通道創建
+            // Create the channel with circuit breaker protection
             return circuitBreakerManager.execute(targetKey, () -> {
-                // 確定是否使用 TLS
+                // Determine whether TLS should be used
                 boolean useTls = determineTlsUsage(mapping);
                 SslContext sslContext = null;
 
@@ -180,7 +181,7 @@ public class OptimizedDynamicGrpcProxyManager {
                     sslContext = createSslContext(mapping);
                 }
 
-                // 使用連接池管理器獲取通道
+                // Acquire the channel from the connection pool manager
                 return connectionPoolManager.getChannel(
                         targetKey,
                         mapping.getTargetHostName(),
@@ -201,7 +202,7 @@ public class OptimizedDynamicGrpcProxyManager {
     }
 
     /**
-     * 確定 TLS 使用情況
+     * Determine TLS usage
      */
     private boolean determineTlsUsage(GrpcProxyMap mapping) {
         String secureMode = mapping.getSecureMode();
@@ -216,7 +217,7 @@ public class OptimizedDynamicGrpcProxyManager {
                 return false;
             case "AUTO":
             default:
-                // 使用熔斷器保護的 TLS 檢測
+                // TLS detection protected by a circuit breaker
                 try {
                     return circuitBreakerManager.execute("tls-detection:" + mapping.getTargetHostName(),
                             () -> detectTlsSupport(mapping.getTargetHostName(), mapping.getTargetPort()));
@@ -229,16 +230,16 @@ public class OptimizedDynamicGrpcProxyManager {
     }
 
     /**
-     * 檢測 TLS 支持（簡化版）
+     * Check TLS support (simplified)
      */
     private boolean detectTlsSupport(String hostname, int port) {
-        // 這裡可以實現實際的 TLS 檢測邏輯
-        // 為了示例，我們返回 false（plaintext）
+        // Actual TLS detection logic can be implemented here
+        // For demonstration we return false (plaintext)
         return false;
     }
 
     /**
-     * 創建 SSL 上下文
+     * Create the SSL context
      */
     private SslContext createSslContext(GrpcProxyMap mapping) {
         try {
@@ -256,27 +257,27 @@ public class OptimizedDynamicGrpcProxyManager {
     }
 
     /**
-     * 創建目標鍵
+     * Create the target key
      */
     private String createTargetKey(GrpcProxyMap mapping) {
         return mapping.getTargetHostName() + ":" + mapping.getTargetPort();
     }
 
     /**
-     * 移除代理映射
+     * Remove a proxy mapping
      */
     private void removeProxyMapping(String proxyHostname, boolean publishEvent) {
         GrpcProxyMap mapping = activeProxyMappings.remove(proxyHostname);
         if (mapping != null) {
             String targetKey = createTargetKey(mapping);
 
-            // 移除連接池
+            // Remove the connection pool
             connectionPoolManager.removeChannelPool(targetKey);
 
-            // 記錄斷開連接 metrics
+            // Record disconnection metrics
             proxyMetrics.recordConnection(targetKey, false);
 
-            // 移除狀態
+            // Remove status entry
             proxyStatusMap.remove(proxyHostname);
 
             logger.info("Removed proxy mapping: {}", proxyHostname);
@@ -289,23 +290,23 @@ public class OptimizedDynamicGrpcProxyManager {
     }
 
     /**
-     * 啟動後台任務
+     * Start background tasks
      */
     private void startBackgroundTasks() {
-        // 定期健康檢查
+        // Periodic health checks
         scheduledExecutor.scheduleAtFixedRate(this::performHealthChecks, 30, 30, TimeUnit.SECONDS);
 
-        // 定期 metrics 報告
+        // Periodic metrics reporting
         scheduledExecutor.scheduleAtFixedRate(this::reportMetrics, 60, 60, TimeUnit.SECONDS);
 
-        // 定期內存清理
+        // Periodic memory cleanup
         scheduledExecutor.scheduleAtFixedRate(this::performMemoryCleanup, 300, 300, TimeUnit.SECONDS);
 
         logger.info("Background tasks started");
     }
 
     /**
-     * 執行健康檢查
+     * Perform health checks
      */
     private void performHealthChecks() {
         try {
@@ -313,7 +314,7 @@ public class OptimizedDynamicGrpcProxyManager {
                 String proxyHostname = entry.getKey();
                 ProxyStatus status = entry.getValue();
 
-                // 使用熔斷器進行健康檢查
+                // Perform health check with circuit breaker
                 try {
                     boolean healthy = circuitBreakerManager.execute(status.getTargetKey(),
                             () -> checkProxyHealth(status));
@@ -331,23 +332,23 @@ public class OptimizedDynamicGrpcProxyManager {
     }
 
     /**
-     * 檢查代理健康狀態
+     * Check the health of a proxy
      */
     private boolean checkProxyHealth(ProxyStatus status) {
-        // 這裡可以實現實際的健康檢查邏輯
-        // 例如發送一個簡單的 ping 請求
-        return true; // 簡化實現
+        // Real health check logic can be implemented here
+        // For example, send a simple ping request
+        return true; // Simplified implementation
     }
 
     /**
-     * 報告 metrics
+     * Report metrics
      */
     private void reportMetrics() {
         try {
             ProxyMetrics.MetricsSummary summary = proxyMetrics.getSummary();
             logger.info("Proxy metrics summary: {}", summary);
 
-            // 報告連接池狀態
+            // Report connection pool status
             Map<String, ConnectionPoolManager.PoolStatistics> poolStats =
                     connectionPoolManager.getAllPoolStatistics();
 
@@ -357,7 +358,7 @@ public class OptimizedDynamicGrpcProxyManager {
                         logger.info("  {}: {}", key, stats));
             }
 
-            // 報告熔斷器狀態
+            // Report circuit breaker status
             Map<String, CircuitBreakerManager.CircuitBreakerStatus> circuitStats =
                     circuitBreakerManager.getAllCircuitBreakerStatus();
 
@@ -372,7 +373,7 @@ public class OptimizedDynamicGrpcProxyManager {
                 });
             }
 
-            // 報告內存統計
+            // Report memory statistics
             MemoryOptimizer.MemoryStatistics memStats = memoryOptimizer.getMemoryStatistics();
             logger.info("Memory statistics: {}", memStats);
 
@@ -382,14 +383,14 @@ public class OptimizedDynamicGrpcProxyManager {
     }
 
     /**
-     * 執行內存清理
+     * Perform memory cleanup
      */
     private void performMemoryCleanup() {
         try {
             logger.debug("Performing periodic memory cleanup");
             memoryOptimizer.cleanupCaches();
 
-            // 檢查內存使用情況
+            // Check memory usage
             MemoryOptimizer.MemoryStatistics memStats = memoryOptimizer.getMemoryStatistics();
             if (memStats.getMemoryUsagePercentage() > 85) {
                 logger.warn("High memory usage detected ({}%), performing aggressive cleanup",
@@ -403,35 +404,35 @@ public class OptimizedDynamicGrpcProxyManager {
     }
 
     /**
-     * 獲取處理器註冊表
+     * Get the handler registry
      */
     public HandlerRegistry getHandlerRegistry() {
         return handlerRegistry;
     }
 
     /**
-     * 獲取活躍代理主機名列表
+     * Get the list of active proxy hostnames
      */
     public List<String> getActiveProxyHostnames() {
         return new ArrayList<>(activeProxyMappings.keySet());
     }
 
     /**
-     * 獲取代理映射
+     * Get a proxy mapping
      */
     public GrpcProxyMap getProxyMapping(String proxyHostname) {
         return activeProxyMappings.get(proxyHostname);
     }
 
     /**
-     * 獲取所有代理狀態
+     * Get all proxy status information
      */
     public Map<String, ProxyStatus> getAllProxyStatus() {
         return new HashMap<>(proxyStatusMap);
     }
 
     /**
-     * 添加代理映射
+     * Add a proxy mapping
      */
     public synchronized void addProxyMapping(GrpcProxyMap mapping) {
         logger.info("Adding new proxy mapping: {}", mapping.getProxyHostName());
@@ -445,13 +446,13 @@ public class OptimizedDynamicGrpcProxyManager {
                     proxyStatusMap.put(mapping.getProxyHostName(),
                             new ProxyStatus(mapping.getProxyHostName(), targetKey, true));
 
-                    // 重新創建處理器註冊表
+                    // Recreate the handler registry
                     refreshHandlerRegistry();
 
-                    // 記錄 metrics
+                    // Record metrics
                     proxyMetrics.recordConnection(targetKey, true);
 
-                    // 發布事件
+                    // Publish event
                     eventPublisher.publishEvent(new ProxyConfigChangedEvent(
                             ProxyConfigChangedEvent.ChangeType.ADDED, mapping.getProxyHostName()));
                 }
@@ -463,24 +464,24 @@ public class OptimizedDynamicGrpcProxyManager {
     }
 
     /**
-     * 更新代理映射
+     * Update a proxy mapping
      */
     public synchronized void updateProxyMapping(GrpcProxyMap mapping) {
         logger.info("Updating proxy mapping: {}", mapping.getProxyHostName());
 
         if ("Y".equals(mapping.getEnable())) {
-            // 先移除舊映射
+            // Remove the old mapping first
             removeProxyMapping(mapping.getProxyHostName(), false);
-            // 添加新映射
+            // Add the new mapping
             addProxyMapping(mapping);
         } else {
-            // 禁用映射
+            // Disable the mapping
             removeProxyMapping(mapping.getProxyHostName(), true);
         }
     }
 
     /**
-     * 刷新處理器註冊表
+     * Refresh the handler registry
      */
     private void refreshHandlerRegistry() {
         Map<String, ManagedChannel> channelMap = new ConcurrentHashMap<>();
@@ -510,7 +511,7 @@ public class OptimizedDynamicGrpcProxyManager {
     public void shutdown() {
         logger.info("Shutting down optimized dynamic gRPC proxy manager");
 
-        // 停止後台任務
+        // Stop background tasks
         scheduledExecutor.shutdown();
         try {
             if (!scheduledExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
@@ -521,14 +522,14 @@ public class OptimizedDynamicGrpcProxyManager {
             Thread.currentThread().interrupt();
         }
 
-        // 清理連接池
+        // Clean up connection pools
         connectionPoolManager.shutdown();
 
         logger.info("Optimized dynamic gRPC proxy manager shutdown completed");
     }
 
     /**
-     * 代理狀態類
+     * Proxy status class
      */
     public static class ProxyStatus {
         private final String proxyHostname;
