@@ -27,7 +27,7 @@ import {
 const AuthService = {
   baseUrl: '/api/auth',
 
-  async login(username, password) {
+  async login(username: string, password: string) {
     const response = await fetch(`${this.baseUrl}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -36,7 +36,7 @@ const AuthService = {
     return response.json();
   },
 
-  async logout(token) {
+  async logout(token: string) {
     const response = await fetch(`${this.baseUrl}/logout`, {
       method: 'POST',
       headers: {
@@ -47,7 +47,7 @@ const AuthService = {
     return response.json();
   },
 
-  async register(username, password, email) {
+  async register(username: string, password: string, email: string) {
     const response = await fetch(`${this.baseUrl}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -56,7 +56,7 @@ const AuthService = {
     return response.json();
   },
 
-  async validateToken(token) {
+  async validateToken(token: string) {
     const response = await fetch(`${this.baseUrl}/validate`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -64,7 +64,7 @@ const AuthService = {
     return response.json();
   },
 
-  async getCurrentUser(token) {
+  async getCurrentUser(token: string) {
     const response = await fetch(`${this.baseUrl}/me`, {
       method: 'GET',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -79,21 +79,21 @@ const AuthService = {
 const ProxyService = {
   baseUrl: '/api/proxy',
 
-  async getAllProxies(token) {
+  async getAllProxies(token: string) {
     const response = await fetch(this.baseUrl, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     return response.json();
   },
 
-  async getEnabledProxies(token) {
+  async getEnabledProxies(token: string) {
     const response = await fetch(`${this.baseUrl}/enabled`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     return response.json();
   },
 
-  async createProxy(token, proxyData) {
+  async createProxy(token: string, proxyData: any) {
     const response = await fetch(this.baseUrl, {
       method: 'POST',
       headers: {
@@ -105,7 +105,7 @@ const ProxyService = {
     return response.json();
   },
 
-  async updateProxy(token, id, proxyData) {
+  async updateProxy(token: string, id: number, proxyData: any) {
     const response = await fetch(`${this.baseUrl}/${id}`, {
       method: 'PUT',
       headers: {
@@ -117,7 +117,7 @@ const ProxyService = {
     return response.json();
   },
 
-  async updateProxyStatus(token, id, enable) {
+  async updateProxyStatus(token: string, id: number, enable: boolean) {
     const response = await fetch(`${this.baseUrl}/${id}/status?enable=${enable}`, {
       method: 'PATCH',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -125,7 +125,7 @@ const ProxyService = {
     return response.json();
   },
 
-  async deleteProxy(token, id) {
+  async deleteProxy(token: string, id: number) {
     const response = await fetch(`${this.baseUrl}/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -133,7 +133,7 @@ const ProxyService = {
     return response.ok;
   },
 
-  async refreshProxies(token) {
+  async refreshProxies(token: string) {
     const response = await fetch(`${this.baseUrl}/refresh`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
@@ -141,14 +141,14 @@ const ProxyService = {
     return response.json();
   },
 
-  async getActiveProxies(token) {
+  async getActiveProxies(token: string) {
     const response = await fetch(`${this.baseUrl}/active`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     return response.json();
   },
 
-  async getHealth(token) {
+  async getHealth(token: string) {
     const response = await fetch(`${this.baseUrl}/health`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -159,11 +159,19 @@ const ProxyService = {
 // ===========================================
 // 3. 驗證內容 - 狀態管理
 // ===========================================
-const AuthContext = React.createContext();
+interface AuthContextType {
+  user: any;
+  token: string | null;
+  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  loading: boolean;
+}
 
-const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
+
+const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<any>(null);
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -189,7 +197,7 @@ const AuthProvider = ({ children }) => {
     validateToken();
   }, [token]);
 
-  const login = async (username, password) => {
+  const login = async (username: string, password: string) => {
     try {
       const result = await AuthService.login(username, password);
       if (result.token) {
@@ -200,7 +208,7 @@ const AuthProvider = ({ children }) => {
         return { success: true };
       }
       return { success: false, error: result.error || '登入失敗' };
-    } catch (error) {
+    } catch (error: any) {
       return { success: false, error: error.message };
     }
   };
@@ -225,7 +233,7 @@ const AuthProvider = ({ children }) => {
   );
 };
 
-const useAuth = () => {
+const useAuth = (): AuthContextType => {
   const context = React.useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth 必須在 AuthProvider 內使用');
@@ -236,7 +244,7 @@ const useAuth = () => {
 // ===========================================
 // 4. 登入表單組件
 // ===========================================
-const LoginForm = () => {
+const LoginForm: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -244,14 +252,14 @@ const LoginForm = () => {
   const [error, setError] = useState('');
   const { login } = useAuth();
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     const result = await login(username, password);
     if (!result.success) {
-      setError(result.error);
+      setError(result.error || '登入失敗');
     }
     setLoading(false);
   };
@@ -281,7 +289,7 @@ const LoginForm = () => {
               <input
                   type="text"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="請輸入使用者名稱"
                   required
@@ -296,7 +304,7 @@ const LoginForm = () => {
                 <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="請輸入密碼"
                     required
@@ -332,7 +340,12 @@ const LoginForm = () => {
 // ===========================================
 // 5. 側邊導覽列組件
 // ===========================================
-const Sidebar = ({ activeTab, setActiveTab }) => {
+interface SidebarProps {
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
   const { user, logout } = useAuth();
 
   const isAdmin = user?.username === 'admin' || user?.role === 'ADMIN';
@@ -405,7 +418,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
 // ===========================================
 // 6. 儀表板組件
 // ===========================================
-const Dashboard = () => {
+const Dashboard: React.FC = () => {
   const { token } = useAuth();
   const [stats, setStats] = useState({
     totalProxies: 0,
@@ -419,14 +432,14 @@ const Dashboard = () => {
     const fetchStats = async () => {
       try {
         const [allProxies, health, active] = await Promise.all([
-          ProxyService.getAllProxies(token),
-          ProxyService.getHealth(token),
-          ProxyService.getActiveProxies(token)
+          ProxyService.getAllProxies(token!),
+          ProxyService.getHealth(token!),
+          ProxyService.getActiveProxies(token!)
         ]);
 
         setStats({
           totalProxies: allProxies.length || 0,
-          enabledProxies: allProxies.filter(p => p.enable === 'Y').length || 0,
+          enabledProxies: allProxies.filter((p: any) => p.enable === 'Y').length || 0,
           activeConnections: active.count || 0,
           systemHealth: health.status === 'UP' ? 'healthy' : 'unhealthy'
         });
@@ -442,7 +455,14 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, [token]);
 
-  const statCards = [
+  type ColorType = 'blue' | 'green' | 'purple' | 'red';
+
+  const statCards: Array<{
+    title: string;
+    value: string | number;
+    icon: any;
+    color: ColorType;
+  }> = [
     {
       title: '總代理數',
       value: stats.totalProxies,
@@ -491,7 +511,7 @@ const Dashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {statCards.map((card, index) => {
             const Icon = card.icon;
-            const colorClasses = {
+            const colorClasses: Record<ColorType, string> = {
               blue: 'bg-blue-50 text-blue-600 border-blue-200',
               green: 'bg-green-50 text-green-600 border-green-200',
               purple: 'bg-purple-50 text-purple-600 border-purple-200',
@@ -542,19 +562,19 @@ const Dashboard = () => {
 // ===========================================
 // 7. 代理管理組件
 // ===========================================
-const ProxyManagement = () => {
+const ProxyManagement: React.FC = () => {
   const { token, user } = useAuth();
-  const [proxies, setProxies] = useState([]);
+  const [proxies, setProxies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [editingProxy, setEditingProxy] = useState(null);
+  const [editingProxy, setEditingProxy] = useState<any>(null);
 
   const isAdmin = user?.username === 'admin' || user?.role === 'ADMIN';
 
   const fetchProxies = async () => {
     try {
-      const data = await ProxyService.getAllProxies(token);
+      const data = await ProxyService.getAllProxies(token!);
       setProxies(data);
     } catch (error) {
       console.error('載入代理列表錯誤:', error);
@@ -567,24 +587,24 @@ const ProxyManagement = () => {
     fetchProxies();
   }, [token]);
 
-  const handleStatusToggle = async (proxy) => {
+  const handleStatusToggle = async (proxy: any) => {
     if (!isAdmin) return;
 
     try {
       const newStatus = proxy.enable === 'Y' ? false : true;
-      await ProxyService.updateProxyStatus(token, proxy.proxyMapId, newStatus);
+      await ProxyService.updateProxyStatus(token!, proxy.proxyMapId, newStatus);
       fetchProxies();
     } catch (error) {
       console.error('切換狀態錯誤:', error);
     }
   };
 
-  const handleDelete = async (proxy) => {
+  const handleDelete = async (proxy: any) => {
     if (!isAdmin) return;
 
     if (window.confirm(`確定要刪除代理 "${proxy.proxyHostName}" 嗎？`)) {
       try {
-        await ProxyService.deleteProxy(token, proxy.proxyMapId);
+        await ProxyService.deleteProxy(token!, proxy.proxyMapId);
         fetchProxies();
       } catch (error) {
         console.error('刪除代理錯誤:', error);
@@ -640,7 +660,7 @@ const ProxyManagement = () => {
                   type="text"
                   placeholder="搜尋代理名稱、服務名稱或目標主機..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                   className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -776,7 +796,7 @@ const ProxyManagement = () => {
                   setShowCreateModal(false);
                   setEditingProxy(null);
                 }}
-                token={token}
+                token={token!}
             />
         )}
       </div>
@@ -786,7 +806,14 @@ const ProxyManagement = () => {
 // ===========================================
 // 8. 代理設定模態框組件
 // ===========================================
-const ProxyModal = ({ proxy, onClose, onSave, token }) => {
+interface ProxyModalProps {
+  proxy: any;
+  onClose: () => void;
+  onSave: () => void;
+  token: string;
+}
+
+const ProxyModal: React.FC<ProxyModalProps> = ({ proxy, onClose, onSave, token }) => {
   const [formData, setFormData] = useState({
     serviceName: '',
     proxyHostName: '',
@@ -823,7 +850,7 @@ const ProxyModal = ({ proxy, onClose, onSave, token }) => {
     }
   }, [proxy]);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -835,7 +862,7 @@ const ProxyModal = ({ proxy, onClose, onSave, token }) => {
         await ProxyService.createProxy(token, formData);
       }
       onSave();
-    } catch (error) {
+    } catch (error: any) {
       setError(error.message || '儲存失敗');
     } finally {
       setLoading(false);
@@ -866,7 +893,7 @@ const ProxyModal = ({ proxy, onClose, onSave, token }) => {
                 <input
                     type="text"
                     value={formData.serviceName}
-                    onChange={(e) => setFormData({...formData, serviceName: e.target.value})}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({...formData, serviceName: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required
                 />
@@ -879,7 +906,7 @@ const ProxyModal = ({ proxy, onClose, onSave, token }) => {
                 <input
                     type="text"
                     value={formData.proxyHostName}
-                    onChange={(e) => setFormData({...formData, proxyHostName: e.target.value})}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({...formData, proxyHostName: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="api.example.com"
                     required
@@ -893,7 +920,7 @@ const ProxyModal = ({ proxy, onClose, onSave, token }) => {
                 <input
                     type="text"
                     value={formData.targetHostName}
-                    onChange={(e) => setFormData({...formData, targetHostName: e.target.value})}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({...formData, targetHostName: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="backend.internal"
                     required
@@ -907,7 +934,7 @@ const ProxyModal = ({ proxy, onClose, onSave, token }) => {
                 <input
                     type="number"
                     value={formData.targetPort}
-                    onChange={(e) => setFormData({...formData, targetPort: parseInt(e.target.value)})}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({...formData, targetPort: parseInt(e.target.value) || 8080})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     min="1"
                     max="65535"
@@ -921,7 +948,7 @@ const ProxyModal = ({ proxy, onClose, onSave, token }) => {
                 </label>
                 <select
                     value={formData.secureMode}
-                    onChange={(e) => setFormData({...formData, secureMode: e.target.value})}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({...formData, secureMode: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="AUTO">自動偵測</option>
@@ -936,7 +963,7 @@ const ProxyModal = ({ proxy, onClose, onSave, token }) => {
                 </label>
                 <select
                     value={formData.enable}
-                    onChange={(e) => setFormData({...formData, enable: e.target.value})}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({...formData, enable: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="Y">啟用</option>
@@ -955,7 +982,7 @@ const ProxyModal = ({ proxy, onClose, onSave, token }) => {
                   <input
                       type="number"
                       value={formData.connectTimeoutMs}
-                      onChange={(e) => setFormData({...formData, connectTimeoutMs: parseInt(e.target.value)})}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({...formData, connectTimeoutMs: parseInt(e.target.value) || 5000})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       min="1000"
                   />
@@ -967,7 +994,7 @@ const ProxyModal = ({ proxy, onClose, onSave, token }) => {
                   <input
                       type="number"
                       value={formData.sendTimeoutMs}
-                      onChange={(e) => setFormData({...formData, sendTimeoutMs: parseInt(e.target.value)})}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({...formData, sendTimeoutMs: parseInt(e.target.value) || 10000})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       min="1000"
                   />
@@ -979,7 +1006,7 @@ const ProxyModal = ({ proxy, onClose, onSave, token }) => {
                   <input
                       type="number"
                       value={formData.readTimeoutMs}
-                      onChange={(e) => setFormData({...formData, readTimeoutMs: parseInt(e.target.value)})}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({...formData, readTimeoutMs: parseInt(e.target.value) || 30000})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       min="1000"
                   />
@@ -995,7 +1022,7 @@ const ProxyModal = ({ proxy, onClose, onSave, token }) => {
                     <input
                         type="checkbox"
                         checked={formData.autoTrustUpstreamCerts === 'Y'}
-                        onChange={(e) => setFormData({
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({
                           ...formData,
                           autoTrustUpstreamCerts: e.target.checked ? 'Y' : 'N'
                         })}
@@ -1015,9 +1042,9 @@ const ProxyModal = ({ proxy, onClose, onSave, token }) => {
                       </label>
                       <textarea
                           value={formData.trustedCertsContent}
-                          onChange={(e) => setFormData({...formData, trustedCertsContent: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFormData({...formData, trustedCertsContent: e.target.value})}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          rows="6"
+                          rows={6}
                           placeholder="-----BEGIN CERTIFICATE-----
 ...
 -----END CERTIFICATE-----"
@@ -1052,7 +1079,7 @@ const ProxyModal = ({ proxy, onClose, onSave, token }) => {
 // ===========================================
 // 9. 系統設定組件
 // ===========================================
-const SystemSettings = () => {
+const SystemSettings: React.FC = () => {
   const { token } = useAuth();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -1061,9 +1088,9 @@ const SystemSettings = () => {
     setLoading(true);
     setMessage('');
     try {
-      await ProxyService.refreshProxies(token);
+      await ProxyService.refreshProxies(token!);
       setMessage('所有代理設定已重新載入');
-    } catch (error) {
+    } catch (error: any) {
       setMessage('重新載入失敗: ' + error.message);
     } finally {
       setLoading(false);
@@ -1151,7 +1178,7 @@ const SystemSettings = () => {
 // ===========================================
 // 10. 使用者管理組件 (占位符)
 // ===========================================
-const UserManagement = () => {
+const UserManagement: React.FC = () => {
   return (
       <div className="p-6 space-y-6">
         <h1 className="text-2xl font-bold text-gray-900">使用者管理</h1>
@@ -1172,7 +1199,7 @@ const UserManagement = () => {
 // ===========================================
 // 11. 主應用程式組件
 // ===========================================
-const App = () => {
+const App: React.FC = () => {
   const { user, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
 
@@ -1219,7 +1246,7 @@ const App = () => {
 // ===========================================
 // 12. 根組件
 // ===========================================
-const GStreamGateApp = () => {
+const GStreamGateApp: React.FC = () => {
   return (
       <AuthProvider>
         <App />

@@ -1,5 +1,5 @@
 # ==========================================
-# Spring Boot 應用配置 - 使用 Undertow 版本
+# Spring Boot 應用配置 - 修復資料庫初始化問題
 # ==========================================
 
 spring:
@@ -12,32 +12,28 @@ spring:
   main:
     allow-circular-references: true
 
-  # 完全禁用 Spring Security（僅開發環境）
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
-      - org.springframework.boot.actuate.autoconfigure.security.servlet.ManagementWebSecurityAutoConfiguration
-
-  # 數據庫配置
+  # 資料庫配置
   datasource:
-    url: jdbc:h2:mem:testdb
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     driver-class-name: org.h2.Driver
     username: sa
     password: password
 
-  # SQL 初始化配置
+  # SQL 初始化配置 (Spring Boot 3.x 新設定)
   sql:
     init:
-      mode: always
+      mode: always                    # 關鍵：強制執行 SQL 腳本
       schema-locations: classpath:schema.sql
       data-locations: classpath:data.sql
-      continue-on-error: true
+      continue-on-error: false        # 遇到錯誤時停止
+      separator: ;
+      encoding: UTF-8
 
-  # JPA 配置
+  # JPA 配置 - 重要：避免與 SQL 腳本衝突
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
-      ddl-auto: none  # 不讓 Hibernate 自動創建表，使用 schema.sql
+      ddl-auto: none                  # 關鍵：禁用 Hibernate 自動建表，使用 schema.sql
       naming:
         physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
         implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
@@ -45,14 +41,16 @@ spring:
     properties:
       hibernate:
         format_sql: true
-        # 不要全域引用標識符，避免大小寫問題
         globally_quoted_identifiers: false
+    defer-datasource-initialization: false  # 立即初始化資料庫
 
   # H2 控制台（開發環境）
   h2:
     console:
       enabled: true
       path: /h2-console
+      settings:
+        web-allow-others: false       # 安全設定
 
 # ==========================================
 # JWT 認證配置
@@ -172,26 +170,22 @@ management:
       threshold: 1073741824  # 1GB in bytes
 
 # ==========================================
-# 日志配置
+# 日志配置 - 添加資料庫初始化日誌
 # ==========================================
 logging:
   level:
     root: INFO
     io.github.alvinchiu.gstreamgate: DEBUG
-    io.github.alvinchiu.gstreamgate.server: INFO
-    io.github.alvinchiu.gstreamgate.manager: INFO
-    io.github.alvinchiu.gstreamgate.handler: DEBUG
-    io.github.alvinchiu.gstreamgate.pool: INFO
-    io.github.alvinchiu.gstreamgate.circuit: INFO
-    io.github.alvinchiu.gstreamgate.metrics: INFO
-    io.github.alvinchiu.gstreamgate.optimization: INFO
+    org.springframework.boot.autoconfigure.sql.init: DEBUG  # 新增：SQL 初始化日誌
+    org.springframework.jdbc.datasource.init: DEBUG         # 新增：DataSource 初始化日誌
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    com.zaxxer.hikari: DEBUG                                 # 新增：連接池日誌
     org.springframework.boot: INFO
     org.springframework.web: INFO
     io.grpc: WARN
     io.grpc.netty: WARN
     io.netty: WARN
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
     # Undertow 相關日志
     io.undertow: INFO
     org.xnio: WARN
@@ -248,10 +242,17 @@ spring:
       on-profile: development
 
   datasource:
-    url: jdbc:h2:mem:devdb
+    url: jdbc:h2:mem:devdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+
+  # 開發環境：強制執行 SQL 初始化
+  sql:
+    init:
+      mode: always
 
   jpa:
     show-sql: true
+    hibernate:
+      ddl-auto: none  # 開發環境也使用 schema.sql
 
 # Undertow 開發環境配置
 server:
@@ -266,6 +267,8 @@ logging:
   level:
     io.github.alvinchiu.gstreamgate: DEBUG
     io.undertow: DEBUG
+    org.springframework.boot.autoconfigure.sql.init: DEBUG
+    org.springframework.jdbc.datasource.init: DEBUG
 
 ---
 # ==========================================
@@ -285,6 +288,11 @@ spring:
     username: ${DB_USERNAME:gstreamgate}
     password: ${DB_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
+
+  # 生產環境 SQL 初始化
+  sql:
+    init:
+      mode: never  # 生產環境不執行 SQL 腳本
 
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect

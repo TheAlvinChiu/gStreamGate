@@ -25,7 +25,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/proxy")
-@CrossOrigin(origins = "*")
 public class GrpcProxyController {
     private static final Logger logger = LoggerFactory.getLogger(GrpcProxyController.class);
 

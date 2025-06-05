@@ -1,12 +1,15 @@
 package io.github.alvinchiu.gstreamgate.config;
 
 import io.github.alvinchiu.gstreamgate.security.JwtAuthenticationFilter;
+import io.github.alvinchiu.gstreamgate.service.AuthService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.env.Environment;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -19,8 +22,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 
 /**
- * Enhanced Spring Security configuration with JWT authentication and role-based access control.
- * 修復循環依賴問題
+ * 修復循環依賴的 Spring Security 配置
  */
 @Configuration
 @EnableWebSecurity
@@ -39,17 +41,29 @@ public class SecurityConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
+        logger.info("Creating BCryptPasswordEncoder");
         return new BCryptPasswordEncoder();
     }
 
     @Bean
+    public DaoAuthenticationProvider authenticationProvider(@Lazy AuthService authService, PasswordEncoder passwordEncoder) {
+        logger.info("Creating DaoAuthenticationProvider");
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+        authProvider.setUserDetailsService(authService);
+        authProvider.setPasswordEncoder(passwordEncoder);
+        authProvider.setHideUserNotFoundExceptions(false); // 更好的錯誤訊息
+        return authProvider;
+    }
+
+    @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        logger.info("Creating AuthenticationManager");
         return config.getAuthenticationManager();
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        logger.info("Configuring Enhanced Security Filter Chain with strict JWT authentication");
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, DaoAuthenticationProvider authenticationProvider) throws Exception {
+        logger.info("Configuring Security Filter Chain with JWT authentication");
 
         // 檢查是否為開發環境
         boolean isDevelopment = environment.matchesProfiles("development");
@@ -57,8 +71,12 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+                // 設置認證提供者
+                .authenticationProvider(authenticationProvider)
+
                 .authorizeHttpRequests(authz -> {
-                    logger.info("Setting up strict authorization rules with role-based access control");
+                    logger.info("Setting up authorization rules");
 
                     // 公開端點 - 僅認證相關
                     authz.requestMatchers("/api/auth/login", "/api/auth/register").permitAll();
@@ -70,6 +88,12 @@ public class SecurityConfig {
                     if (isDevelopment) {
                         authz.requestMatchers("/h2-console/**").permitAll();
                         logger.info("H2 Console access enabled for development environment");
+                    }
+
+                    // 開發環境工具端點
+                    if (isDevelopment) {
+                        authz.requestMatchers("/api/dev/**").permitAll();
+                        logger.info("Development tools enabled");
                     }
 
                     // 管理員專用端點 - 需要ADMIN角色
@@ -89,7 +113,7 @@ public class SecurityConfig {
                     authz.anyRequest().authenticated();
                 })
                 .headers(headers -> {
-                    logger.info("Configuring enhanced security headers");
+                    logger.info("Configuring security headers");
                     headers
                             .frameOptions(frameOptions -> frameOptions.sameOrigin())
                             .contentTypeOptions(contentTypeOptions -> {})
@@ -101,7 +125,7 @@ public class SecurityConfig {
                 })
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
-        logger.info("Enhanced Security Filter Chain configured successfully with strict JWT authentication and role-based access control");
+        logger.info("Security Filter Chain configured successfully");
         return http.build();
     }
 }

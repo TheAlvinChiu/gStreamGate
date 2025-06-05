@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -56,12 +57,75 @@ public class AuthService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+        logger.debug("Loading user by username: {}", username);
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> {
+                    logger.warn("User not found: {}", username);
+                    return new UsernameNotFoundException("User not found: " + username);
+                });
+
+        logger.debug("User found: {}, enabled: {}, role: {}", username, user.isEnabled(), user.getRole());
+        return user;
     }
 
     @Transactional
     public Map<String, Object> login(String username, String password) {
+        logger.info("Attempting login for user: {}", username);
+
+        try {
+            // 方案1：直接手動驗證（避免 AuthenticationManager 循環依賴）
+            User user = userRepository.findByUsername(username).orElse(null);
+
+            if (user == null) {
+                logger.warn("Login failed - user not found: {}", username);
+                throw new BadCredentialsException("Invalid username or password");
+            }
+
+            if (!user.isEnabled()) {
+                logger.warn("Login failed - user disabled: {}", username);
+                throw new BadCredentialsException("User account is disabled");
+            }
+
+            // 驗證密碼
+            if (!passwordEncoder.matches(password, user.getPassword())) {
+                logger.warn("Login failed - password mismatch for user: {}", username);
+                throw new BadCredentialsException("Invalid username or password");
+            }
+
+            logger.info("Password verification successful for user: {}", username);
+
+            // 生成JWT token
+            String token = jwtUtil.generateToken(user);
+
+            // 更新最後登入時間
+            userRepository.updateLastLogin(username, new Date());
+
+            logger.info("User logged in successfully: {}", username);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("token", token);
+            response.put("username", username);
+            response.put("role", user.getRole().name());
+            response.put("message", "Login successful");
+
+            return response;
+
+        } catch (BadCredentialsException e) {
+            logger.error("Login failed for user: {}, error: {}", username, e.getMessage());
+            throw new RuntimeException("Invalid username or password");
+        } catch (Exception e) {
+            logger.error("Login failed for user: {}, unexpected error: {}", username, e.getMessage(), e);
+            throw new RuntimeException("Login failed due to system error");
+        }
+    }
+
+    /**
+     * 備用登入方法：使用 AuthenticationManager（如果需要）
+     */
+    @Transactional
+    public Map<String, Object> loginWithAuthManager(String username, String password) {
+        logger.info("Attempting login with AuthenticationManager for user: {}", username);
+
         try {
             // 驗證使用者憑證
             Authentication authentication = getAuthenticationManager().authenticate(
@@ -76,7 +140,7 @@ public class AuthService implements UserDetailsService {
             // 更新最後登入時間
             userRepository.updateLastLogin(username, new Date());
 
-            logger.info("User logged in successfully: {}", username);
+            logger.info("User logged in successfully with AuthManager: {}", username);
 
             Map<String, Object> response = new HashMap<>();
             response.put("token", token);
