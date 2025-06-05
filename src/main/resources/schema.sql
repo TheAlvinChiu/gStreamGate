@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS grpc_proxy_map (
-                                              proxy_map_id           BIGINT AUTO_INCREMENT PRIMARY KEY,
-                                              service_name           VARCHAR(255) NOT NULL,                     -- Target service name
+    proxy_map_id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+    service_name           VARCHAR(255) NOT NULL,                     -- Target service name
     proxy_hostname         VARCHAR(255) NOT NULL,                     -- Proxy location
     target_hostname        VARCHAR(255) NOT NULL,                     -- Target service location
     target_port            INT NOT NULL,                              -- Target service port
@@ -20,8 +20,22 @@ CREATE TABLE IF NOT EXISTS grpc_proxy_map (
     version                INT             DEFAULT 1                  -- Version
     );
 
--- Create index on proxy_hostname for faster lookups
-CREATE INDEX IF NOT EXISTS idx_proxy_hostname ON grpc_proxy_map(proxy_hostname);
+CREATE TABLE IF NOT EXISTS users (
+    id                     BIGINT AUTO_INCREMENT PRIMARY KEY,
+    username               VARCHAR(50) UNIQUE NOT NULL,               -- 用戶名
+    password               VARCHAR(255) NOT NULL,                     -- 加密密碼
+    email                  VARCHAR(100) UNIQUE NOT NULL,              -- 電子郵件
+    role                   VARCHAR(20) DEFAULT 'USER',                -- 角色 (USER, ADMIN)
+    enabled                BOOLEAN DEFAULT true,                      -- 是否啟用
+    created_date           DATETIME DEFAULT CURRENT_TIMESTAMP,        -- 創建時間
+    last_login             DATETIME                                   -- 最後登入時間
+    );
 
--- Create index on enable status for faster filtering
+-- grpc_proxy_map 索引
+CREATE INDEX IF NOT EXISTS idx_proxy_hostname ON grpc_proxy_map(proxy_hostname);
 CREATE INDEX IF NOT EXISTS idx_enable ON grpc_proxy_map(enable);
+
+-- users 索引
+CREATE INDEX IF NOT EXISTS idx_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_enabled ON users(enabled);
