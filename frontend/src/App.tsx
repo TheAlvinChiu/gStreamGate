@@ -1,0 +1,1230 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Shield,
+  Server,
+  Activity,
+  Settings,
+  Users,
+  LogOut,
+  Eye,
+  EyeOff,
+  Plus,
+  Edit,
+  Trash2,
+  Power,
+  PowerOff,
+  RefreshCw,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  Search,
+  Filter
+} from 'lucide-react';
+
+// ===========================================
+// 1. 驗證服務 - API 呼叫模組
+// ===========================================
+const AuthService = {
+  baseUrl: '/api/auth',
+
+  async login(username, password) {
+    const response = await fetch(`${this.baseUrl}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    return response.json();
+  },
+
+  async logout(token) {
+    const response = await fetch(`${this.baseUrl}/logout`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    return response.json();
+  },
+
+  async register(username, password, email) {
+    const response = await fetch(`${this.baseUrl}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, email })
+    });
+    return response.json();
+  },
+
+  async validateToken(token) {
+    const response = await fetch(`${this.baseUrl}/validate`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async getCurrentUser(token) {
+    const response = await fetch(`${this.baseUrl}/me`, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  }
+};
+
+// ===========================================
+// 2. 代理服務 - API 呼叫模組
+// ===========================================
+const ProxyService = {
+  baseUrl: '/api/proxy',
+
+  async getAllProxies(token) {
+    const response = await fetch(this.baseUrl, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async getEnabledProxies(token) {
+    const response = await fetch(`${this.baseUrl}/enabled`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async createProxy(token, proxyData) {
+    const response = await fetch(this.baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(proxyData)
+    });
+    return response.json();
+  },
+
+  async updateProxy(token, id, proxyData) {
+    const response = await fetch(`${this.baseUrl}/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(proxyData)
+    });
+    return response.json();
+  },
+
+  async updateProxyStatus(token, id, enable) {
+    const response = await fetch(`${this.baseUrl}/${id}/status?enable=${enable}`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async deleteProxy(token, id) {
+    const response = await fetch(`${this.baseUrl}/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.ok;
+  },
+
+  async refreshProxies(token) {
+    const response = await fetch(`${this.baseUrl}/refresh`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async getActiveProxies(token) {
+    const response = await fetch(`${this.baseUrl}/active`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async getHealth(token) {
+    const response = await fetch(`${this.baseUrl}/health`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  }
+};
+
+// ===========================================
+// 3. 驗證內容 - 狀態管理
+// ===========================================
+const AuthContext = React.createContext();
+
+const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const validateToken = async () => {
+      if (token) {
+        try {
+          const result = await AuthService.validateToken(token);
+          if (result.valid) {
+            const userInfo = await AuthService.getCurrentUser(token);
+            setUser(userInfo);
+          } else {
+            localStorage.removeItem('token');
+            setToken(null);
+          }
+        } catch (error) {
+          localStorage.removeItem('token');
+          setToken(null);
+        }
+      }
+      setLoading(false);
+    };
+
+    validateToken();
+  }, [token]);
+
+  const login = async (username, password) => {
+    try {
+      const result = await AuthService.login(username, password);
+      if (result.token) {
+        setToken(result.token);
+        localStorage.setItem('token', result.token);
+        const userInfo = await AuthService.getCurrentUser(result.token);
+        setUser(userInfo);
+        return { success: true };
+      }
+      return { success: false, error: result.error || '登入失敗' };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  };
+
+  const logout = async () => {
+    if (token) {
+      try {
+        await AuthService.logout(token);
+      } catch (error) {
+        console.error('登出錯誤:', error);
+      }
+    }
+    setUser(null);
+    setToken(null);
+    localStorage.removeItem('token');
+  };
+
+  return (
+      <AuthContext.Provider value={{ user, token, login, logout, loading }}>
+        {children}
+      </AuthContext.Provider>
+  );
+};
+
+const useAuth = () => {
+  const context = React.useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth 必須在 AuthProvider 內使用');
+  }
+  return context;
+};
+
+// ===========================================
+// 4. 登入表單組件
+// ===========================================
+const LoginForm = () => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const { login } = useAuth();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    const result = await login(username, password);
+    if (!result.success) {
+      setError(result.error);
+    }
+    setLoading(false);
+  };
+
+  return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full space-y-8">
+          <div className="text-center">
+            <div className="mx-auto h-16 w-16 bg-blue-600 rounded-full flex items-center justify-center mb-4">
+              <Shield className="h-8 w-8 text-white" />
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900">gStreamGate</h2>
+            <p className="mt-2 text-gray-600">企業級 gRPC 代理管理平台</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="mt-8 space-y-6 bg-white p-8 rounded-xl shadow-lg">
+            {error && (
+                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg">
+                  {error}
+                </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                使用者名稱
+              </label>
+              <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="請輸入使用者名稱"
+                  required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                密碼
+              </label>
+              <div className="relative">
+                <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="請輸入密碼"
+                    required
+                />
+                <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? '登入中...' : '登入'}
+            </button>
+
+            <div className="text-center text-sm text-gray-500">
+              <p>預設帳戶: admin / password</p>
+              <p>一般使用者: user / password</p>
+            </div>
+          </form>
+        </div>
+      </div>
+  );
+};
+
+// ===========================================
+// 5. 側邊導覽列組件
+// ===========================================
+const Sidebar = ({ activeTab, setActiveTab }) => {
+  const { user, logout } = useAuth();
+
+  const isAdmin = user?.username === 'admin' || user?.role === 'ADMIN';
+
+  const menuItems = [
+    { id: 'dashboard', label: '儀表板', icon: Activity, adminOnly: false },
+    { id: 'proxies', label: '代理管理', icon: Server, adminOnly: false },
+    { id: 'settings', label: '系統設定', icon: Settings, adminOnly: true },
+    { id: 'users', label: '使用者管理', icon: Users, adminOnly: true }
+  ];
+
+  const visibleItems = menuItems.filter(item => !item.adminOnly || isAdmin);
+
+  return (
+      <div className="bg-gray-900 text-white w-64 min-h-screen flex flex-col">
+        <div className="p-6 border-b border-gray-700">
+          <div className="flex items-center space-x-3">
+            <div className="h-10 w-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <Shield className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold">gStreamGate</h1>
+              <p className="text-gray-400 text-sm">v1.0.0</p>
+            </div>
+          </div>
+        </div>
+
+        <nav className="flex-1 px-4 py-6 space-y-2">
+          {visibleItems.map((item) => {
+            const Icon = item.icon;
+            return (
+                <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                        activeTab === item.id
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    }`}
+                >
+                  <Icon className="h-5 w-5" />
+                  <span>{item.label}</span>
+                </button>
+            );
+          })}
+        </nav>
+
+        <div className="p-4 border-t border-gray-700">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="h-8 w-8 bg-gray-600 rounded-full flex items-center justify-center">
+              <Users className="h-4 w-4" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium">{user?.username}</p>
+              <p className="text-xs text-gray-400">{isAdmin ? '管理員' : '使用者'}</p>
+            </div>
+          </div>
+          <button
+              onClick={logout}
+              className="w-full flex items-center space-x-3 px-4 py-2 text-gray-300 hover:bg-gray-800 hover:text-white rounded-lg transition-colors"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>登出</span>
+          </button>
+        </div>
+      </div>
+  );
+};
+
+// ===========================================
+// 6. 儀表板組件
+// ===========================================
+const Dashboard = () => {
+  const { token } = useAuth();
+  const [stats, setStats] = useState({
+    totalProxies: 0,
+    enabledProxies: 0,
+    activeConnections: 0,
+    systemHealth: 'unknown'
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const [allProxies, health, active] = await Promise.all([
+          ProxyService.getAllProxies(token),
+          ProxyService.getHealth(token),
+          ProxyService.getActiveProxies(token)
+        ]);
+
+        setStats({
+          totalProxies: allProxies.length || 0,
+          enabledProxies: allProxies.filter(p => p.enable === 'Y').length || 0,
+          activeConnections: active.count || 0,
+          systemHealth: health.status === 'UP' ? 'healthy' : 'unhealthy'
+        });
+      } catch (error) {
+        console.error('載入統計資料錯誤:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  const statCards = [
+    {
+      title: '總代理數',
+      value: stats.totalProxies,
+      icon: Server,
+      color: 'blue'
+    },
+    {
+      title: '啟用代理',
+      value: stats.enabledProxies,
+      icon: CheckCircle,
+      color: 'green'
+    },
+    {
+      title: '活躍連線',
+      value: stats.activeConnections,
+      icon: Activity,
+      color: 'purple'
+    },
+    {
+      title: '系統狀態',
+      value: stats.systemHealth === 'healthy' ? '正常' : '異常',
+      icon: stats.systemHealth === 'healthy' ? CheckCircle : XCircle,
+      color: stats.systemHealth === 'healthy' ? 'green' : 'red'
+    }
+  ];
+
+  if (loading) {
+    return (
+        <div className="p-6">
+          <div className="flex justify-center items-center h-64">
+            <RefreshCw className="h-8 w-8 animate-spin text-blue-500" />
+          </div>
+        </div>
+    );
+  }
+
+  return (
+      <div className="p-6 space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900">儀表板</h1>
+          <div className="text-sm text-gray-500">
+            最後更新: {new Date().toLocaleString('zh-TW')}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {statCards.map((card, index) => {
+            const Icon = card.icon;
+            const colorClasses = {
+              blue: 'bg-blue-50 text-blue-600 border-blue-200',
+              green: 'bg-green-50 text-green-600 border-green-200',
+              purple: 'bg-purple-50 text-purple-600 border-purple-200',
+              red: 'bg-red-50 text-red-600 border-red-200'
+            };
+
+            return (
+                <div key={index} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">{card.title}</p>
+                      <p className="text-2xl font-bold text-gray-900">{card.value}</p>
+                    </div>
+                    <div className={`p-3 rounded-lg border ${colorClasses[card.color]}`}>
+                      <Icon className="h-6 w-6" />
+                    </div>
+                  </div>
+                </div>
+            );
+          })}
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">系統概覽</h2>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+              <span className="text-gray-600">平台版本</span>
+              <span className="font-medium">gStreamGate v1.0.0</span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+              <span className="text-gray-600">Java 版本</span>
+              <span className="font-medium">OpenJDK 21</span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+              <span className="text-gray-600">Spring Boot</span>
+              <span className="font-medium">3.5.0</span>
+            </div>
+            <div className="flex justify-between items-center py-2">
+              <span className="text-gray-600">Web 伺服器</span>
+              <span className="font-medium">Undertow</span>
+            </div>
+          </div>
+        </div>
+      </div>
+  );
+};
+
+// ===========================================
+// 7. 代理管理組件
+// ===========================================
+const ProxyManagement = () => {
+  const { token, user } = useAuth();
+  const [proxies, setProxies] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingProxy, setEditingProxy] = useState(null);
+
+  const isAdmin = user?.username === 'admin' || user?.role === 'ADMIN';
+
+  const fetchProxies = async () => {
+    try {
+      const data = await ProxyService.getAllProxies(token);
+      setProxies(data);
+    } catch (error) {
+      console.error('載入代理列表錯誤:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProxies();
+  }, [token]);
+
+  const handleStatusToggle = async (proxy) => {
+    if (!isAdmin) return;
+
+    try {
+      const newStatus = proxy.enable === 'Y' ? false : true;
+      await ProxyService.updateProxyStatus(token, proxy.proxyMapId, newStatus);
+      fetchProxies();
+    } catch (error) {
+      console.error('切換狀態錯誤:', error);
+    }
+  };
+
+  const handleDelete = async (proxy) => {
+    if (!isAdmin) return;
+
+    if (window.confirm(`確定要刪除代理 "${proxy.proxyHostName}" 嗎？`)) {
+      try {
+        await ProxyService.deleteProxy(token, proxy.proxyMapId);
+        fetchProxies();
+      } catch (error) {
+        console.error('刪除代理錯誤:', error);
+      }
+    }
+  };
+
+  const filteredProxies = proxies.filter(proxy =>
+      proxy.proxyHostName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      proxy.serviceName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      proxy.targetHostName?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (loading) {
+    return (
+        <div className="p-6">
+          <div className="flex justify-center items-center h-64">
+            <RefreshCw className="h-8 w-8 animate-spin text-blue-500" />
+          </div>
+        </div>
+    );
+  }
+
+  return (
+      <div className="p-6 space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900">代理管理</h1>
+          <div className="flex space-x-3">
+            <button
+                onClick={fetchProxies}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              <span>重新整理</span>
+            </button>
+            {isAdmin && (
+                <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>新增代理</span>
+                </button>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div className="p-4 border-b border-gray-200">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <input
+                  type="text"
+                  placeholder="搜尋代理名稱、服務名稱或目標主機..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  服務資訊
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  目標位址
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  安全模式
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  狀態
+                </th>
+                {isAdmin && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      操作
+                    </th>
+                )}
+              </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+              {filteredProxies.map((proxy) => (
+                  <tr key={proxy.proxyMapId} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {proxy.proxyHostName}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {proxy.serviceName}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {proxy.targetHostName}:{proxy.targetPort}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        proxy.secureMode === 'SECURE' ? 'bg-green-100 text-green-800' :
+                            proxy.secureMode === 'PLAINTEXT' ? 'bg-gray-100 text-gray-800' :
+                                'bg-blue-100 text-blue-800'
+                    }`}>
+                      {proxy.secureMode === 'SECURE' ? 'TLS' :
+                          proxy.secureMode === 'PLAINTEXT' ? '明文' : '自動'}
+                    </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        {proxy.enable === 'Y' ? (
+                            <div className="flex items-center space-x-2">
+                              <div className="h-2 w-2 bg-green-400 rounded-full"></div>
+                              <span className="text-sm text-green-700">啟用</span>
+                            </div>
+                        ) : (
+                            <div className="flex items-center space-x-2">
+                              <div className="h-2 w-2 bg-gray-400 rounded-full"></div>
+                              <span className="text-sm text-gray-500">停用</span>
+                            </div>
+                        )}
+                      </div>
+                    </td>
+                    {isAdmin && (
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex space-x-2">
+                            <button
+                                onClick={() => handleStatusToggle(proxy)}
+                                className={`p-1 rounded-lg transition-colors ${
+                                    proxy.enable === 'Y'
+                                        ? 'text-red-600 hover:bg-red-50'
+                                        : 'text-green-600 hover:bg-green-50'
+                                }`}
+                                title={proxy.enable === 'Y' ? '停用' : '啟用'}
+                            >
+                              {proxy.enable === 'Y' ?
+                                  <PowerOff className="h-4 w-4" /> :
+                                  <Power className="h-4 w-4" />
+                              }
+                            </button>
+                            <button
+                                onClick={() => setEditingProxy(proxy)}
+                                className="p-1 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="編輯"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
+                                onClick={() => handleDelete(proxy)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="刪除"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                    )}
+                  </tr>
+              ))}
+              </tbody>
+            </table>
+
+            {filteredProxies.length === 0 && (
+                <div className="text-center py-12">
+                  <Server className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">沒有找到代理</h3>
+                  <p className="text-gray-500">
+                    {searchTerm ? '請嘗試調整搜尋條件' : '還沒有配置任何代理服務'}
+                  </p>
+                </div>
+            )}
+          </div>
+        </div>
+
+        {/* 新增/編輯模態框 */}
+        {(showCreateModal || editingProxy) && (
+            <ProxyModal
+                proxy={editingProxy}
+                onClose={() => {
+                  setShowCreateModal(false);
+                  setEditingProxy(null);
+                }}
+                onSave={() => {
+                  fetchProxies();
+                  setShowCreateModal(false);
+                  setEditingProxy(null);
+                }}
+                token={token}
+            />
+        )}
+      </div>
+  );
+};
+
+// ===========================================
+// 8. 代理設定模態框組件
+// ===========================================
+const ProxyModal = ({ proxy, onClose, onSave, token }) => {
+  const [formData, setFormData] = useState({
+    serviceName: '',
+    proxyHostName: '',
+    targetHostName: '',
+    targetPort: 8080,
+    connectTimeoutMs: 5000,
+    sendTimeoutMs: 10000,
+    readTimeoutMs: 30000,
+    secureMode: 'AUTO',
+    enable: 'Y',
+    autoTrustUpstreamCerts: 'N',
+    trustedCertsContent: ''
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const isEditing = !!proxy;
+
+  useEffect(() => {
+    if (proxy) {
+      setFormData({
+        serviceName: proxy.serviceName || '',
+        proxyHostName: proxy.proxyHostName || '',
+        targetHostName: proxy.targetHostName || '',
+        targetPort: proxy.targetPort || 8080,
+        connectTimeoutMs: proxy.connectTimeoutMs || 5000,
+        sendTimeoutMs: proxy.sendTimeoutMs || 10000,
+        readTimeoutMs: proxy.readTimeoutMs || 30000,
+        secureMode: proxy.secureMode || 'AUTO',
+        enable: proxy.enable || 'Y',
+        autoTrustUpstreamCerts: proxy.autoTrustUpstreamCerts || 'N',
+        trustedCertsContent: proxy.trustedCertsContent || ''
+      });
+    }
+  }, [proxy]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (isEditing) {
+        await ProxyService.updateProxy(token, proxy.proxyMapId, formData);
+      } else {
+        await ProxyService.createProxy(token, formData);
+      }
+      onSave();
+    } catch (error) {
+      setError(error.message || '儲存失敗');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-xl font-bold text-gray-900">
+              {isEditing ? '編輯代理設定' : '新增代理設定'}
+            </h2>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            {error && (
+                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg">
+                  {error}
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  服務名稱 *
+                </label>
+                <input
+                    type="text"
+                    value={formData.serviceName}
+                    onChange={(e) => setFormData({...formData, serviceName: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  代理主機名稱 *
+                </label>
+                <input
+                    type="text"
+                    value={formData.proxyHostName}
+                    onChange={(e) => setFormData({...formData, proxyHostName: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="api.example.com"
+                    required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  目標主機名稱 *
+                </label>
+                <input
+                    type="text"
+                    value={formData.targetHostName}
+                    onChange={(e) => setFormData({...formData, targetHostName: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="backend.internal"
+                    required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  目標埠號 *
+                </label>
+                <input
+                    type="number"
+                    value={formData.targetPort}
+                    onChange={(e) => setFormData({...formData, targetPort: parseInt(e.target.value)})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    min="1"
+                    max="65535"
+                    required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  安全模式
+                </label>
+                <select
+                    value={formData.secureMode}
+                    onChange={(e) => setFormData({...formData, secureMode: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="AUTO">自動偵測</option>
+                  <option value="SECURE">強制 TLS</option>
+                  <option value="PLAINTEXT">明文傳輸</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  狀態
+                </label>
+                <select
+                    value={formData.enable}
+                    onChange={(e) => setFormData({...formData, enable: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="Y">啟用</option>
+                  <option value="N">停用</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">逾時設定</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    連線逾時 (ms)
+                  </label>
+                  <input
+                      type="number"
+                      value={formData.connectTimeoutMs}
+                      onChange={(e) => setFormData({...formData, connectTimeoutMs: parseInt(e.target.value)})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      min="1000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    傳送逾時 (ms)
+                  </label>
+                  <input
+                      type="number"
+                      value={formData.sendTimeoutMs}
+                      onChange={(e) => setFormData({...formData, sendTimeoutMs: parseInt(e.target.value)})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      min="1000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    讀取逾時 (ms)
+                  </label>
+                  <input
+                      type="number"
+                      value={formData.readTimeoutMs}
+                      onChange={(e) => setFormData({...formData, readTimeoutMs: parseInt(e.target.value)})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      min="1000"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">TLS 設定</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="flex items-center space-x-3">
+                    <input
+                        type="checkbox"
+                        checked={formData.autoTrustUpstreamCerts === 'Y'}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          autoTrustUpstreamCerts: e.target.checked ? 'Y' : 'N'
+                        })}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700">自動信任上游憑證</span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    ⚠️ 僅用於測試環境，生產環境請提供受信任的憑證
+                  </p>
+                </div>
+
+                {formData.autoTrustUpstreamCerts === 'N' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        受信任的 CA 憑證 (PEM 格式)
+                      </label>
+                      <textarea
+                          value={formData.trustedCertsContent}
+                          onChange={(e) => setFormData({...formData, trustedCertsContent: e.target.value})}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          rows="6"
+                          placeholder="-----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----"
+                      />
+                    </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+              <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading ? '儲存中...' : (isEditing ? '更新' : '建立')}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+  );
+};
+
+// ===========================================
+// 9. 系統設定組件
+// ===========================================
+const SystemSettings = () => {
+  const { token } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const handleRefreshAll = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      await ProxyService.refreshProxies(token);
+      setMessage('所有代理設定已重新載入');
+    } catch (error) {
+      setMessage('重新載入失敗: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+      <div className="p-6 space-y-6">
+        <h1 className="text-2xl font-bold text-gray-900">系統設定</h1>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">代理服務控制</h2>
+
+          {message && (
+              <div className={`mb-4 px-4 py-3 rounded-lg ${
+                  message.includes('失敗')
+                      ? 'bg-red-50 border border-red-200 text-red-600'
+                      : 'bg-green-50 border border-green-200 text-green-600'
+              }`}>
+                {message}
+              </div>
+          )}
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div>
+                <h3 className="font-medium text-gray-900">重新載入所有代理</h3>
+                <p className="text-sm text-gray-600">從資料庫重新載入所有代理設定並重新啟動服務</p>
+              </div>
+              <button
+                  onClick={handleRefreshAll}
+                  disabled={loading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                <span>{loading ? '執行中...' : '執行'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">系統資訊</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="font-medium text-gray-900 mb-3">應用程式資訊</h3>
+              <dl className="space-y-2">
+                <div className="flex justify-between">
+                  <dt className="text-sm text-gray-600">版本</dt>
+                  <dd className="text-sm font-medium">v1.0.0</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-sm text-gray-600">建置日期</dt>
+                  <dd className="text-sm font-medium">2025-06-05</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-sm text-gray-600">Java 版本</dt>
+                  <dd className="text-sm font-medium">OpenJDK 21</dd>
+                </div>
+              </dl>
+            </div>
+            <div>
+              <h3 className="font-medium text-gray-900 mb-3">框架資訊</h3>
+              <dl className="space-y-2">
+                <div className="flex justify-between">
+                  <dt className="text-sm text-gray-600">Spring Boot</dt>
+                  <dd className="text-sm font-medium">3.5.0</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-sm text-gray-600">Web 伺服器</dt>
+                  <dd className="text-sm font-medium">Undertow</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-sm text-gray-600">gRPC</dt>
+                  <dd className="text-sm font-medium">1.68.1</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+  );
+};
+
+// ===========================================
+// 10. 使用者管理組件 (占位符)
+// ===========================================
+const UserManagement = () => {
+  return (
+      <div className="p-6 space-y-6">
+        <h1 className="text-2xl font-bold text-gray-900">使用者管理</h1>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <div className="text-center py-12">
+            <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">使用者管理功能</h3>
+            <p className="text-gray-500">
+              此功能正在開發中，將在後續版本中提供完整的使用者管理功能
+            </p>
+          </div>
+        </div>
+      </div>
+  );
+};
+
+// ===========================================
+// 11. 主應用程式組件
+// ===========================================
+const App = () => {
+  const { user, loading } = useAuth();
+  const [activeTab, setActiveTab] = useState('dashboard');
+
+  if (loading) {
+    return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <RefreshCw className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
+            <p className="text-gray-600">載入中...</p>
+          </div>
+        </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginForm />;
+  }
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return <Dashboard />;
+      case 'proxies':
+        return <ProxyManagement />;
+      case 'settings':
+        return <SystemSettings />;
+      case 'users':
+        return <UserManagement />;
+      default:
+        return <Dashboard />;
+    }
+  };
+
+  return (
+      <div className="flex h-screen bg-gray-50">
+        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+        <main className="flex-1 overflow-y-auto">
+          {renderContent()}
+        </main>
+      </div>
+  );
+};
+
+// ===========================================
+// 12. 根組件
+// ===========================================
+const GStreamGateApp = () => {
+  return (
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+  );
+};
+
+export default GStreamGateApp;

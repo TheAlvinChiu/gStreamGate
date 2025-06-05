@@ -1,75 +1,117 @@
 # ==========================================
-# Multi-stage Dockerfile for gRPC Proxy
-# Optimized for production with security best practices
+# Multi-stage Dockerfile for gStreamGate
+# 整合前後端建置與生產部署
 # ==========================================
 
 # ==========================================
-# Stage 1: Build Environment
+# Stage 1: Frontend Build Environment
 # ==========================================
-FROM gradle:8.10.2-jdk21-alpine AS builder
+FROM node:21-alpine AS frontend-builder
+
+# 設置工作目錄
+WORKDIR /frontend
+
+# 設置 Node.js 環境變數
+ENV NODE_ENV=production
+ENV GENERATE_SOURCEMAP=false
+
+# 複製前端套件配置檔案（利用 Docker 快取層）
+COPY frontend/package*.json ./
+
+# 安裝前端依賴
+RUN npm ci --only=production --silent
+
+# 複製前端原始碼
+COPY frontend/ .
+
+# 建置前端應用程式
+RUN npm run build && \
+    # 驗證建置結果
+    ls -la dist/ && \
+    echo "✅ Frontend build completed"
+
+# ==========================================
+# Stage 2: Backend Build Environment
+# ==========================================
+FROM gradle:8.10.2-jdk21-alpine AS backend-builder
 
 # 設置工作目錄
 WORKDIR /app
 
-# 設置構建環境變量
+# 設置建置環境變數
 ENV GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.configureondemand=true"
 ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
 
-# 複製 Gradle 配置文件（利用 Docker 緩存層）
+# 複製 Gradle 配置檔案（利用 Docker 快取層）
 COPY gradle/ gradle/
 COPY gradlew build.gradle settings.gradle ./
 
 # 設置 gradlew 執行權限
 RUN chmod +x ./gradlew
 
-# 預下載依賴（緩存優化）
+# 預下載依賴（快取優化）
 RUN ./gradlew dependencies --no-daemon --quiet
 
-# 複製源代碼
+# 複製後端原始碼
 COPY src/ src/
 
-# 構建應用程序
+# 複製前端建置結果到 Spring Boot 靜態資源目錄
+COPY --from=frontend-builder /frontend/dist/ src/main/resources/static/
+
+# 建置後端應用程式
 RUN ./gradlew bootJar --no-daemon --quiet && \
-    # 驗證 JAR 文件
+    # 驗證 JAR 檔案
     ls -la build/libs/ && \
-    # 提取 JAR 文件名
+    # 提取 JAR 檔案名稱
     JAR_FILE=$(find build/libs -name "*.jar" -not -name "*-plain.jar" | head -1) && \
     echo "Built JAR: $JAR_FILE" && \
-    # 重命名為固定名稱以便後續使用
-    cp "$JAR_FILE" /app/app.jar
+    # 重新命名為固定名稱以便後續使用
+    cp "$JAR_FILE" /app/app.jar && \
+    echo "✅ Backend build completed with integrated frontend"
 
 # ==========================================
-# Stage 2: Runtime Environment
+# Stage 3: Runtime Environment
 # ==========================================
 FROM eclipse-temurin:21-jre-alpine AS runtime
 
-# 安全性：創建非 root 用戶
+# 安全性：建立非 root 使用者
 RUN addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
 
-# 安裝必要的工具和安全更新
+# 安裝必要工具和安全更新
 RUN apk update && \
     apk upgrade && \
     apk add --no-cache \
         curl \
         dumb-init \
-        tzdata && \
-    # 清理緩存
-    rm -rf /var/cache/apk/*
+        tzdata \
+        ca-certificates && \
+    # 清理快取
+    rm -rf /var/cache/apk/* && \
+    # 更新 CA 憑證
+    update-ca-certificates
 
-# 設置時區
+# 設置時區為台北時間
 ENV TZ=Asia/Taipei
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # 設置工作目錄
 WORKDIR /app
 
-# 創建日志目錄
+# 建立日誌目錄
 RUN mkdir -p /app/logs && \
     chown -R appuser:appgroup /app
 
-# 複製 JAR 文件
-COPY --from=builder --chown=appuser:appgroup /app/app.jar /app/app.jar
+# 複製 JAR 檔案
+COPY --from=backend-builder --chown=appuser:appgroup /app/app.jar /app/app.jar
+
+# 驗證 JAR 檔案和靜態資源
+RUN java -jar /app/app.jar --version 2>/dev/null || echo "JAR file ready" && \
+    echo "Container build completed successfully"
+
+# ==========================================
+# Environment Variables Configuration
+# ==========================================
 
 # JVM 優化配置
 ENV JAVA_OPTS="-server \
@@ -99,7 +141,7 @@ ENV UNDERTOW_OPTS="-Dio.undertow.disable-file-system-watcher=true \
 # gRPC 優化配置
 ENV GRPC_OPTS="-Dio.grpc.netty.shaded.io.grpc.netty.useCustomAllocator=true"
 
-# Spring Boot 配置
+# Spring Boot 應用程式配置
 ENV SPRING_OPTS="--spring.profiles.active=production \
     --server.port=8080 \
     --grpc.proxy.server.port=9191 \
@@ -115,18 +157,27 @@ ENV HEALTH_CHECK_OPTS="--management.health.circuitbreakers.enabled=true \
     --management.health.diskspace.enabled=true \
     --management.health.diskspace.threshold=1073741824"
 
+# 日誌配置
+ENV LOGGING_OPTS="--logging.level.io.github.alvinchiu.gstreamgate=INFO \
+    --logging.level.org.springframework.web=INFO \
+    --logging.file.name=/app/logs/gstream-gate.log"
+
 # 組合所有 JVM 參數
 ENV JVM_ARGS="$JAVA_OPTS $NETTY_OPTS $UNDERTOW_OPTS $GRPC_OPTS"
-ENV APP_ARGS="$SPRING_OPTS $HEALTH_CHECK_OPTS"
+ENV APP_ARGS="$SPRING_OPTS $HEALTH_CHECK_OPTS $LOGGING_OPTS"
 
-# 暴露端口
+# ==========================================
+# Runtime Configuration
+# ==========================================
+
+# 暴露埠號
 EXPOSE 8080 9191
 
 # 健康檢查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8080/actuator/health || exit 1
 
-# 切換到非 root 用戶
+# 切換到非 root 使用者
 USER appuser:appgroup
 
 # 設置入口點
@@ -136,12 +187,18 @@ ENTRYPOINT ["dumb-init", "--"]
 CMD ["sh", "-c", "exec java $JVM_ARGS -jar /app/app.jar $APP_ARGS"]
 
 # ==========================================
-# Metadata
+# Container Metadata
 # ==========================================
 LABEL maintainer="Alvin Chiu <thealvin@gmail.com>" \
       org.opencontainers.image.title="gStreamGate" \
-      org.opencontainers.image.description="High-performance gRPC proxy with Undertow and Spring Boot 3.5.0" \
+      org.opencontainers.image.description="企業級 gRPC 代理服務，整合 Web 管理介面" \
       org.opencontainers.image.version="1.0.0" \
       org.opencontainers.image.vendor="AlvinChiu" \
       org.opencontainers.image.source="https://github.com/TheAlvinChiu/gStreamGate.git" \
-      org.opencontainers.image.documentation="https://github.com/alvinchiu/gstream-gate-proxy/README.md"
+      org.opencontainers.image.documentation="https://github.com/alvinchiu/gstream-gate-proxy/README.md" \
+      org.opencontainers.image.created="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+      org.opencontainers.image.revision="$(git rev-parse HEAD 2>/dev/null || echo 'unknown')" \
+      org.opencontainers.image.licenses="MIT" \
+      app.frontend.framework="Vite + React + TypeScript" \
+      app.backend.framework="Spring Boot 3.5.0 + Undertow" \
+      app.features="gRPC代理,Web管理介面,企業級安全,效能優化"

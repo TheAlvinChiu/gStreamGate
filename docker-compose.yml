@@ -51,6 +51,12 @@ services:
       # 時區設置
       - TZ=Asia/Taipei
 
+  # 前端服務
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+
     # 資源限制
     deploy:
       resources:

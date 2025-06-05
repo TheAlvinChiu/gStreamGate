@@ -182,7 +182,239 @@ dependencyManagement {
     }
 }
 
-// ========== CVE 安全掃描配置 ==========
+// ==========================================
+// 前端檢查和條件式建置
+// ==========================================
+
+// 檢查前端環境
+def hasFrontend = file('frontend').exists() && file('frontend/package.json').exists()
+def hasNode = false
+
+try {
+    def nodeVersionResult = new ByteArrayOutputStream()
+    exec {
+        commandLine 'node', '--version'
+        standardOutput = nodeVersionResult
+        ignoreExitValue = true
+    }
+    hasNode = nodeVersionResult.toString().trim().startsWith('v')
+} catch (Exception ignored) {
+    hasNode = false
+}
+
+println """
+==========================================
+📦 Frontend Build Environment Check
+==========================================
+Frontend directory: ${hasFrontend ? '✅ Found' : '❌ Not found'}
+Node.js available:   ${hasNode ? '✅ Available' : '❌ Not available'}
+Frontend build:      ${hasFrontend && hasNode ? '🔨 Will build' : '⚠️  Will skip'}
+==========================================
+"""
+
+// ==========================================
+// 條件式前端建置任務
+// ==========================================
+
+if (hasFrontend && hasNode) {
+    println "🚀 Enabling frontend build tasks"
+
+    task installNodeModules(type: Exec) {
+        group = 'frontend'
+        description = 'Install frontend dependencies'
+
+        workingDir 'frontend'
+        commandLine 'npm', 'install'
+
+        inputs.files('frontend/package.json', 'frontend/package-lock.json')
+        outputs.dir('frontend/node_modules')
+
+        doFirst {
+            logger.info('📦 Installing frontend dependencies...')
+        }
+
+        doLast {
+            logger.info('✅ Frontend dependencies installed')
+        }
+    }
+
+    task buildFrontend(type: Exec) {
+        group = 'frontend'
+        description = 'Build React frontend with create-react-app'
+        dependsOn installNodeModules
+
+        workingDir 'frontend'
+        commandLine 'npm', 'run', 'build'
+
+        inputs.dir('frontend/src')
+        inputs.dir('frontend/public')
+        inputs.files('frontend/package.json', 'frontend/tailwind.config.js', 'frontend/postcss.config.js')
+        outputs.dir('frontend/build')
+
+        doFirst {
+            logger.info('🔨 Building React frontend...')
+        }
+
+        doLast {
+            // 清理舊的靜態資源（保留 .gitkeep）
+            delete fileTree('src/main/resources/static') {
+                exclude '.gitkeep'
+            }
+
+            // 複製 React 建置結果
+            copy {
+                from 'frontend/build'
+                into 'src/main/resources/static'
+            }
+
+            logger.info('✅ React frontend build completed and copied to static resources')
+        }
+    }
+
+    task cleanFrontend(type: Delete) {
+        group = 'frontend'
+        description = 'Clean frontend build artifacts'
+
+        delete 'frontend/build'
+        delete 'frontend/node_modules'
+        delete fileTree('src/main/resources/static') {
+            exclude '.gitkeep'
+        }
+    }
+
+    // 整合到主建置流程
+    processResources.dependsOn buildFrontend
+    bootJar.dependsOn buildFrontend
+    clean.dependsOn cleanFrontend
+
+} else {
+    // 建立空任務避免依賴錯誤
+    task installNodeModules {
+        group = 'frontend'
+        description = 'Install frontend dependencies (skipped)'
+        doLast {
+            if (!hasFrontend) {
+                logger.warn('⚠️  Frontend directory not found at ./frontend/')
+                logger.warn('💡 Create frontend with: npx create-react-app frontend')
+            } else if (!hasNode) {
+                logger.warn('⚠️  Node.js not found, skipping frontend build')
+                logger.warn('💡 Install Node.js from https://nodejs.org/')
+            }
+        }
+    }
+
+    task buildFrontend {
+        group = 'frontend'
+        description = 'Build frontend (skipped - requirements not met)'
+        dependsOn installNodeModules
+
+        doLast {
+            logger.warn('⚠️  Frontend build skipped')
+        }
+    }
+
+    task cleanFrontend(type: Delete) {
+        group = 'frontend'
+        description = 'Clean frontend artifacts (limited)'
+
+        delete fileTree('src/main/resources/static') {
+            exclude '.gitkeep'
+        }
+    }
+}
+
+// ==========================================
+// 開發和部署任務
+// ==========================================
+
+// 只啟動後端的開發任務
+task runBackendOnly(type: JavaExec) {
+    group = 'application'
+    description = 'Run backend only for development (frontend runs separately)'
+
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'io.github.alvinchiu.gstreamgate.GStreamGateApplication'
+
+    jvmArgs = [
+            '-Dspring.profiles.active=development',
+            '-Dserver.port=5888',
+            '-Dio.undertow.disable-file-system-watcher=true',
+            '--add-opens=java.base/java.nio=ALL-UNNAMED'
+    ]
+
+    doFirst {
+        println """
+        🚀 Starting gStreamGate Backend
+        ==========================================
+        Backend URL:  http://localhost:5888
+        API Prefix:   http://localhost:5888/api
+        Health Check: http://localhost:5888/actuator/health
+        ==========================================
+        💡 Frontend should run separately:
+           cd frontend && npm start
+           Frontend URL: http://localhost:3000
+        ==========================================
+        """
+    }
+}
+
+// 開發模式運行（舊版保持兼容）
+task runDev(type: JavaExec) {
+    group = 'application'
+    description = 'Run the application in development mode with Undertow'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'io.github.alvinchiu.gstreamgate.GStreamGateApplication'
+
+    jvmArgs = [
+            '-Dspring.profiles.active=development',
+            '-Dspring.devtools.restart.enabled=true',
+            '-Dio.undertow.disable-file-system-watcher=true',
+            '--add-opens=java.base/java.nio=ALL-UNNAMED'
+    ]
+
+    systemProperty 'server.undertow.threads.io', '4'
+    systemProperty 'server.undertow.threads.worker', '16'
+}
+
+// 檢查前端建置狀態
+task checkFrontend {
+    group = 'verification'
+    description = 'Check frontend build status and environment'
+
+    doLast {
+        def frontendDir = file('frontend')
+        def packageJson = file('frontend/package.json')
+        def nodeModules = file('frontend/node_modules')
+        def buildDir = file('frontend/build')
+        def staticFiles = file('src/main/resources/static/index.html')
+
+        println """
+        📋 Frontend Environment Status
+        ==========================================
+        Frontend directory:     ${frontendDir.exists() ? '✅' : '❌'}
+        package.json:           ${packageJson.exists() ? '✅' : '❌'}
+        node_modules:           ${nodeModules.exists() ? '✅' : '❌'}
+        React build output:     ${buildDir.exists() ? '✅' : '❌'}
+        Static files copied:    ${staticFiles.exists() ? '✅' : '❌'}
+        Node.js available:      ${hasNode ? '✅' : '❌'}
+        ==========================================
+        """
+
+        if (!frontendDir.exists()) {
+            println "💡 To create frontend: npx create-react-app frontend"
+        } else if (!hasNode) {
+            println "💡 To install Node.js: https://nodejs.org/"
+        } else if (!nodeModules.exists()) {
+            println "💡 To install dependencies: ./gradlew installNodeModules"
+        } else if (!buildDir.exists()) {
+            println "💡 To build frontend: ./gradlew buildFrontend"
+        }
+    }
+}
+
+// ==========================================
+// CVE 安全掃描配置
+// ==========================================
 dependencyCheck {
     format = 'ALL'
     outputDirectory = "${buildDir}/reports/dependency-check"
@@ -212,7 +444,9 @@ dependencyCheck {
     }
 }
 
-// ========== 測試配置 ==========
+// ==========================================
+// 測試配置
+// ==========================================
 tasks.named('test') {
     useJUnitPlatform()
 
@@ -241,7 +475,9 @@ tasks.named('test') {
     finalizedBy jacocoTestReport
 }
 
-// ========== JaCoCo 代碼覆蓋率配置 ==========
+// ==========================================
+// JaCoCo 代碼覆蓋率配置
+// ==========================================
 jacoco {
     toolVersion = "0.8.12"
 }
@@ -267,7 +503,9 @@ jacocoTestReport {
     }
 }
 
-// ========== Spring Boot 打包配置 ==========
+// ==========================================
+// Spring Boot 打包配置
+// ==========================================
 jar {
     enabled = false
     archiveClassifier = ''
@@ -287,17 +525,20 @@ bootJar {
                 'Built-Gradle': gradle.gradleVersion,
                 'Web-Server': 'Undertow',
                 'Spring-Boot-Version': springBootVersion,
-                'Logback-Version': logbackVersion
+                'Logback-Version': logbackVersion,
+                'Frontend-Included': hasFrontend && hasNode ? 'Yes' : 'No'
         )
     }
 }
 
-// ========== 自定義任務 ==========
+// ==========================================
+// 自定義驗證和工具任務
+// ==========================================
 
 // 驗證依賴版本
 task verifyDependencies {
     group = 'verification'
-    description = 'Verify all dependencies can be resolved and check Logback version'
+    description = 'Verify all dependencies can be resolved and check versions'
 
     doLast {
         configurations.compileClasspath.resolve()
@@ -305,22 +546,26 @@ task verifyDependencies {
         println "✅ All dependencies resolved successfully!"
 
         // 打印關鍵依賴版本
-        println "\n📦 Key Dependencies (Latest Versions):"
-        println "Spring Boot: ${springBootVersion}"
-        println "SLF4J: ${slf4jVersion}"
-        println "Logback: ${logbackVersion} (includes StatusPrinter2)"
-        println "gRPC: ${grpcVersion}"
-        println "Undertow: ${undertowVersion}"
-        println "Netty: ${nettyVersion}"
-        println "Micrometer: ${micrometerVersion}"
-        println "Jackson: ${jacksonVersion}"
-        println "JUnit: ${junitVersion}"
+        println """
+📦 Key Dependencies (Latest Versions)
+==========================================
+Spring Boot: ${springBootVersion}
+SLF4J: ${slf4jVersion}
+Logback: ${logbackVersion} (includes StatusPrinter2)
+gRPC: ${grpcVersion}
+Undertow: ${undertowVersion}
+Netty: ${nettyVersion}
+Micrometer: ${micrometerVersion}
+Jackson: ${jacksonVersion}
+JUnit: ${junitVersion}
+==========================================
+        """
 
         // 驗證 Logback 版本
         def logbackClassic = configurations.compileClasspath.resolvedConfiguration.resolvedArtifacts
                 .find { it.moduleVersion.id.name == 'logback-classic' }
         if (logbackClassic) {
-            println "\n✅ Logback Classic resolved version: ${logbackClassic.moduleVersion.id.version}"
+            println "✅ Logback Classic resolved version: ${logbackClassic.moduleVersion.id.version}"
             if (logbackClassic.moduleVersion.id.version.startsWith('1.5')) {
                 println "✅ Logback 1.5.x includes StatusPrinter2 class"
             } else {
@@ -348,11 +593,14 @@ task checkDependencyConflicts {
 
 // 創建 Undertow 優化的啟動腳本
 task createStartScript {
+    group = 'build'
+    description = 'Create optimized startup script'
+
     doLast {
         def startScript = file("${buildDir}/libs/start.sh")
         startScript.parentFile.mkdirs()
         startScript.text = '''#!/bin/bash
-# gRPC Proxy Undertow 優化啟動腳本 (Spring Boot 3.5.0)
+# gStreamGate 優化啟動腳本
 
 JVM_OPTS="-server \\
     -Xms512m \\
@@ -372,38 +620,20 @@ UNDERTOW_OPTS="--server.undertow.threads.io=8 \\
 
 APP_OPTS="--spring.profiles.active=production \\
     --server.port=8080 \\
-    --grpc.proxy.server.port=50051 \\
+    --grpc.proxy.server.port=9191 \\
     $UNDERTOW_OPTS"
 
 JAR_FILE=$(ls *.jar | head -n 1)
 
-echo "Starting gRPC Proxy with Undertow (Spring Boot 3.5.0)..."
+echo "🚀 Starting gStreamGate (Spring Boot ''' + springBootVersion + ''')"
 echo "JAR: $JAR_FILE"
-echo "Logback Version: ''' + logbackVersion + '''"
+echo "Frontend Included: ''' + (hasFrontend && hasNode ? 'Yes' : 'No') + '''"
 
 exec java $JVM_OPTS -jar $JAR_FILE $APP_OPTS
 '''
         startScript.setExecutable(true)
         println "Created start script: ${startScript.absolutePath}"
     }
-}
-
-// 開發模式運行
-task runDev(type: JavaExec) {
-    group = 'application'
-    description = 'Run the application in development mode with Undertow'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'io.github.alvinchiu.gstreamgate.GStreamGateApplication'
-
-    jvmArgs = [
-            '-Dspring.profiles.active=development',
-            '-Dspring.devtools.restart.enabled=true',
-            '-Dio.undertow.disable-file-system-watcher=true',
-            '--add-opens=java.base/java.nio=ALL-UNNAMED'
-    ]
-
-    systemProperty 'server.undertow.threads.io', '4'
-    systemProperty 'server.undertow.threads.worker', '16'
 }
 
 // CVE 安全掃描任務
@@ -415,30 +645,35 @@ task securityScan {
 
 // 打印構建信息
 task buildInfo {
+    group = 'help'
+    description = 'Display build information'
+
     doLast {
         println """
-        ==========================================
-        gRPC Proxy Build Information (Latest)
-        ==========================================
-        Project: ${project.name}
-        Version: ${project.version}
-        Java: ${java.sourceCompatibility}
-        Gradle: ${gradle.gradleVersion}
-        Spring Boot: ${springBootVersion} (Latest)
-        Logback: ${logbackVersion} (Includes StatusPrinter2)
-        SLF4J: ${slf4jVersion}
-        Web Server: Undertow ${undertowVersion}
-        gRPC: ${grpcVersion}
-        ==========================================
-        ✅ Using latest stable versions
-        ✅ Logback 1.5.x includes StatusPrinter2
-        ✅ CVE security scanning enabled
-        ✅ Undertow optimization configured
-        ==========================================
-        """
+==========================================
+🚀 gStreamGate Build Information
+==========================================
+Project: ${project.name}
+Version: ${project.version}
+Java: ${java.sourceCompatibility}
+Gradle: ${gradle.gradleVersion}
+Spring Boot: ${springBootVersion}
+Web Server: Undertow ${undertowVersion}
+gRPC: ${grpcVersion}
+Frontend: ${hasFrontend && hasNode ? 'React (integrated)' : 'Not available'}
+==========================================
+✅ Using latest stable versions
+✅ Enterprise-grade optimization
+✅ Security scanning enabled
+==========================================
+"""
     }
 }
 
-// 構建前驗證依賴
-build.dependsOn verifyDependencies, checkDependencyConflicts, buildInfo
+// ==========================================
+// 任務依賴和順序
+// ==========================================
+
+// 構建前驗證
+build.dependsOn verifyDependencies, checkDependencyConflicts, buildInfo, checkFrontend
 bootJar.finalizedBy createStartScript
