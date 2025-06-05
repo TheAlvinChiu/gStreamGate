@@ -44,3 +44,31 @@ INSERT INTO GRPC_PROXY_MAP (
           'SYSTEM',
           1
       );
+
+-- 插入測試用戶數據（使用正確的 BCrypt 雜湊）
+-- 密碼: password
+-- BCrypt 雜湊: $2a$10$N9qo8uLOickgx2ZMRZoMye2J2KxvR4ZfETe5t0SgU0i5k0l8ZqKPC
+INSERT INTO USERS (
+    username,
+    password,
+    email,
+    role,
+    enabled,
+    created_date
+) VALUES
+      (
+          'admin',
+          '$2a$10$N9qo8uLOickgx2ZMRZoMye2J2KxvR4ZfETe5t0SgU0i5k0l8ZqKPC',
+          'admin@example.com',
+          'ADMIN',
+          true,
+          CURRENT_TIMESTAMP
+      ),
+      (
+          'user',
+          '$2a$10$N9qo8uLOickgx2ZMRZoMye2J2KxvR4ZfETe5t0SgU0i5k0l8ZqKPC',
+          'user@example.com',
+          'USER',
+          true,
+          CURRENT_TIMESTAMP
+      );

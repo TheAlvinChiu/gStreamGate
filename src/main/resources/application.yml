@@ -8,6 +8,10 @@ spring:
   profiles:
     active: development
 
+  # 允許循環依賴（臨時解決方案）
+  main:
+    allow-circular-references: true
+
   # 完全禁用 Spring Security（僅開發環境）
   autoconfigure:
     exclude:
@@ -49,6 +53,17 @@ spring:
     console:
       enabled: true
       path: /h2-console
+
+# ==========================================
+# JWT 認證配置
+# ==========================================
+jwt:
+  secret: gStreamGateSecretKeyThatIsLongEnoughForHS256AlgorithmAndShouldBeChangedInProduction
+  expiration: 86400000  # 24 hours in milliseconds
+
+# 安全配置
+security:
+  require-ssl: false  # 開發環境設為 false，生產環境應設為 true
 
 # ==========================================
 # gRPC Proxy 配置
@@ -260,6 +275,10 @@ spring:
   config:
     activate:
       on-profile: production
+
+  # 生產環境禁用循環依賴
+  main:
+    allow-circular-references: false
 
   datasource:
     url: jdbc:postgresql://localhost:5432/gstreamgate
