@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![gStreamGate Logo](/logos/logo.png)
+![gStreamGate Logo](/logos/logo.webp)
 
 **Enterprise-Grade gRPC Proxy Gateway with Intelligent Management**
 
