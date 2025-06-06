@@ -611,17 +611,6 @@ If this project has been helpful to you, please consider supporting its continue
 
 Your generosity helps keep this project alive and thriving! 🙏
 
-<script 
-  src="https://www.paypal.com/sdk/js?client-id=BAAtAnV5amnaxmsNItgXS1F2_3qEiR7VVnh0BfrmharJh-dwNsgcKyck6sw265HpiQSZopYK42hzXai_lo&components=hosted-buttons&disable-funding=venmo&currency=USD">
-</script>
-
-<div id="paypal-container-SLPZG6EWCK7VQ"></div>
-<script>
-  paypal.HostedButtons({
-    hostedButtonId: "SLPZG6EWCK7VQ",
-  }).render("#paypal-container-SLPZG6EWCK7VQ")
-</script>
-
 ---
 
 <div align="center">
