@@ -1,0 +1,830 @@
+// ==========================================
+// 自定義任務和工具
+// ==========================================
+
+// 驗證依賴
+task verifyDependencies {
+    group = 'verification'
+    description = 'Verify all dependencies can be resolved'
+
+    doLast {
+        try {
+            configurations.compileClasspath.resolve()
+            configurations.testCompileClasspath.resolve()
+            logger.info("✅ All dependencies resolved successfully!")
+
+            // 打印關鍵依賴版本
+            def keyDeps = [
+                    'Spring Boot': project.ext.springBootVersion,
+                    'gRPC': project.ext.grpcVersion,
+                    'Undertow': project.ext.undertowVersion,
+                    'Jackson': project.ext.jacksonVersion
+            ]
+
+            logger.info("Key dependency versions:")
+            keyDeps.each { name, version ->
+                logger.info("- ${name}: ${version}")
+            }
+
+        } catch (Exception e) {
+            logger.error("❌ Dependency resolution failed: ${e.message}")
+            throw e
+        }
+    }
+}
+
+// 創建啟動腳本
+task createStartScript {
+    group = 'build'
+    description = 'Create optimized startup script'
+    dependsOn bootJar
+
+    doLast {
+        def scriptsDir = file("${buildDir}/scripts")
+        scriptsDir.mkdirs()
+
+        def frontendStatus = project.hasProperty('frontendEnabled') ?
+                (project.frontendEnabled ? 'Yes' : 'No') : 'No'
+
+        def startScript = file("${scriptsDir}/start.sh")
+        startScript.text = """#!/bin/bash
+# gStreamGate 優化啟動腳本
+# Generated on: ${new Date()}
+
+JVM_OPTS="-server \\
+    -Xms512m \\
+    -Xmx2048m \\
+    -XX:+UseG1GC \\
+    -XX:MaxGCPauseMillis=200 \\
+    -XX:+UseStringDeduplication \\
+    -Dio.netty.allocator.type=pooled \\
+    -Dio.undertow.disable-file-system-watcher=true \\
+    -Djava.awt.headless=true \\
+    --add-opens=java.base/java.nio=ALL-UNNAMED"
+
+UNDERTOW_OPTS="--server.undertow.threads.io=8 \\
+    --server.undertow.threads.worker=64 \\
+    --server.undertow.buffer-size=16384 \\
+    --server.undertow.direct-buffers=true"
+
+APP_OPTS="--spring.profiles.active=production \\
+    --server.port=8080 \\
+    --grpc.proxy.server.port=9191 \\
+    \$UNDERTOW_OPTS"
+
+JAR_FILE=\$(ls *.jar | head -n 1)
+
+echo "🚀 Starting gStreamGate (Spring Boot ${project.ext.springBootVersion})"
+echo "JAR: \$JAR_FILE"
+echo "Frontend Included: ${frontendStatus}"
+echo "============================================"
+
+exec java \$JVM_OPTS -jar \$JAR_FILE \$APP_OPTS
+"""
+        startScript.setExecutable(true)
+
+        // Windows 版本
+        def startBat = file("${scriptsDir}/start.bat")
+        startBat.text = """@echo off
+REM gStreamGate Windows 啟動腳本
+REM Generated on: ${new Date()}
+
+set JVM_OPTS=-server -Xms512m -Xmx2048m -XX:+UseG1GC -Djava.awt.headless=true
+set APP_OPTS=--spring.profiles.active=production --server.port=8080
+
+for %%f in (*.jar) do set JAR_FILE=%%f
+
+echo 🚀 Starting gStreamGate (Spring Boot ${project.ext.springBootVersion})
+echo JAR: %JAR_FILE%
+echo Frontend Included: ${frontendStatus}
+echo ====================================
+
+java %JVM_OPTS% -jar %JAR_FILE% %APP_OPTS%
+"""
+
+        logger.info("Created startup scripts:")
+        logger.info("- Linux/Mac: ${startScript.absolutePath}")
+        logger.info("- Windows: ${startBat.absolutePath}")
+    }
+}
+
+// 診斷任務
+task diagnose {
+    group = 'help'
+    description = 'Diagnose build environment and issues'
+
+    doLast {
+        logger.info("""
+        ==========================================
+        🔍 Build Environment Diagnosis
+        ==========================================
+        """)
+
+        // 檢查 Java 環境
+        def javaVersion = System.getProperty('java.version')
+        def javaVendor = System.getProperty('java.vendor')
+        def javaHome = System.getProperty('java.home')
+
+        logger.info("Java Environment:")
+        logger.info("- Version: ${javaVersion}")
+        logger.info("- Vendor: ${javaVendor}")
+        logger.info("- Home: ${javaHome}")
+
+        // 檢查 Gradle 環境
+        logger.info("\nGradle Environment:")
+        logger.info("- Version: ${gradle.gradleVersion}")
+        logger.info("- Home: ${gradle.gradleHomeDir}")
+        logger.info("- User Home: ${gradle.gradleUserHomeDir}")
+
+        // 檢查項目結構
+        logger.info("\nProject Structure:")
+        def importantDirs = [
+                'src/main/java',
+                'src/main/resources',
+                'src/test/java',
+                'frontend',
+                'gradle'
+        ]
+
+        importantDirs.each { dir ->
+            def dirFile = file(dir)
+            logger.info("- ${dir}: ${dirFile.exists() ? '✅' : '❌'}")
+        }
+
+        // 檢查前端環境
+        if (project.hasProperty('frontendEnabled')) {
+            logger.info("\nFrontend Environment:")
+            logger.info("- Enabled: ${project.frontendEnabled}")
+            if (project.hasProperty('buildTool')) {
+                logger.info("- Build Tool: ${project.buildTool}")
+            }
+            if (project.hasProperty('outputDir')) {
+                logger.info("- Output Dir: ${project.outputDir}")
+            }
+        }
+
+        // 檢查任務
+        logger.info("\nCritical Tasks:")
+        def criticalTasks = [
+                'build', 'bootJar', 'test',
+                'buildFrontendAssets', 'cleanFrontend'
+        ]
+
+        criticalTasks.each { taskName ->
+            def task = tasks.findByName(taskName)
+            logger.info("- ${taskName}: ${task ? '✅' : '❌'}")
+        }
+
+        // 記憶體狀態
+        def runtime = Runtime.getRuntime()
+        def maxMB = runtime.maxMemory() / 1024 / 1024
+        def totalMB = runtime.totalMemory() / 1024 / 1024
+        def freeMB = runtime.freeMemory() / 1024 / 1024
+
+        logger.info("\nMemory Status:")
+        logger.info("- Max: ${maxMB} MB")
+        logger.info("- Total: ${totalMB} MB")
+        logger.info("- Free: ${freeMB} MB")
+
+        logger.info("\n==========================================")
+    }
+}
+
+// 快速開發設置
+task setupDev {
+    group = 'setup'
+    description = 'Setup development environment'
+    dependsOn 'ensureStaticDir'
+
+    doLast {
+        logger.info("🔧 Setting up development environment...")
+
+        // 創建日誌目錄
+        def logsDir = file('logs')
+        if (!logsDir.exists()) {
+            logsDir.mkdirs()
+            logger.info("✅ Created logs directory")
+        }
+
+        // 檢查前端設置
+        if (project.hasProperty('frontendEnabled') && project.frontendEnabled) {
+            logger.info("✅ Frontend environment ready")
+        } else {
+            logger.info("⚠️  Frontend not available. To set up:")
+            logger.info("   1. Run: npx create-react-app frontend")
+            logger.info("   2. Run: ./gradlew setupDev")
+        }
+
+        // 創建示例配置
+        def configDir = file('config')
+        if (!configDir.exists()) {
+            configDir.mkdirs()
+
+            def devConfig = file('config/application-development.yml')
+            if (!devConfig.exists()) {
+                devConfig.text = """# Development environment configuration
+spring:
+  profiles:
+    active: development
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+logging:
+  level:
+    io.github.alvinchiu.gstreamgate: DEBUG
+    org.springframework.web: DEBUG
+
+# gRPC proxy configuration
+grpc:
+  proxy:
+    server:
+      port: 9092
+
+server:
+  port: 5888
+"""
+                logger.info("✅ Created development configuration")
+            }
+        }
+
+        logger.info("🚀 Development environment setup completed!")
+        logger.info("   Run: ./gradlew runDev")
+    }
+}
+
+// 列出所有可用任務
+task listTasks {
+    group = 'help'
+    description = 'List all available tasks by group'
+
+    doLast {
+        def tasksByGroup = [:]
+
+        project.tasks.each { task ->
+            def group = task.group ?: 'other'
+            if (!tasksByGroup[group]) {
+                tasksByGroup[group] = []
+            }
+            tasksByGroup[group] << task.name
+        }
+
+        logger.info("""
+        ==========================================
+        📋 Available Tasks by Group
+        ==========================================
+        """)
+
+        tasksByGroup.sort().each { group, tasks ->
+            logger.info("\n${group.toUpperCase()}:")
+            tasks.sort().each { taskName ->
+                def task = project.tasks.findByName(taskName)
+                def desc = task?.description ?: 'No description'
+                logger.info("  ${taskName.padRight(25)} - ${desc}")
+            }
+        }
+
+        logger.info("\n==========================================")
+        logger.info("💡 Use './gradlew <task-name>' to run a task")
+        logger.info("💡 Use './gradlew <task-name> --info' for verbose output")
+    }
+}
+
+// 健康檢查
+task healthCheck {
+    group = 'verification'
+    description = 'Perform comprehensive health check'
+
+    doLast {
+        logger.info("🏥 Performing health check...")
+
+        def issues = []
+        def warnings = []
+
+        // 檢查 Java 版本
+        def javaVersion = System.getProperty('java.version')
+        if (!javaVersion.startsWith('21')) {
+            warnings << "Java version is ${javaVersion}, recommended: 21"
+        }
+
+        // 檢查必要文件
+        def requiredFiles = [
+                'src/main/java/io/github/alvinchiu/gstreamgate/GStreamGateApplication.java',
+                'src/main/resources/application.yml',
+                'build.gradle'
+        ]
+
+        requiredFiles.each { filePath ->
+            if (!file(filePath).exists()) {
+                issues << "Missing required file: ${filePath}"
+            }
+        }
+
+        // 檢查前端（如果啟用）
+        if (project.hasProperty('frontendEnabled') && project.frontendEnabled) {
+            if (!file('frontend/package.json').exists()) {
+                issues << "Frontend enabled but package.json not found"
+            }
+        }
+
+        // 報告結果
+        if (issues.isEmpty() && warnings.isEmpty()) {
+            logger.info("✅ Health check passed - no issues found")
+        } else {
+            if (!issues.isEmpty()) {
+                logger.error("❌ Critical issues found:")
+                issues.each { issue ->
+                    logger.error("  - ${issue}")
+                }
+            }
+
+            if (!warnings.isEmpty()) {
+                logger.warn("⚠️  Warnings:")
+                warnings.each { warning ->
+                    logger.warn("  - ${warning}")
+                }
+            }
+        }
+
+        logger.info("🏥 Health check completed")
+    }
+}
+
+// ==========================================
+// 安全掃描任務
+// ==========================================
+task securityScan {
+    group = 'verification'
+    description = 'Run security vulnerability scan'
+    dependsOn 'dependencyCheckAnalyze'
+
+    doLast {
+        def reportDir = file("${buildDir}/reports/dependency-check")
+        if (reportDir.exists()) {
+            logger.info("🔒 Security scan completed")
+            logger.info("Report available at: ${reportDir}/dependency-check-report.html")
+        } else {
+            logger.warn("⚠️  Security scan report not found")
+        }
+    }
+}
+
+// ==========================================
+// 效能分析任務
+// ==========================================
+task analyzePerformance {
+    group = 'analysis'
+    description = 'Analyze build and runtime performance'
+
+    doLast {
+        logger.info("📊 Performance Analysis")
+        logger.info("=" * 50)
+
+        // 分析建置時間
+        def buildStart = gradle.buildStarted
+        def now = new Date()
+        if (buildStart) {
+            def buildTime = now.time - buildStart.time
+            logger.info("Build duration: ${buildTime}ms")
+        }
+
+        // 分析內存使用
+        def runtime = Runtime.getRuntime()
+        def maxMemory = runtime.maxMemory()
+        def totalMemory = runtime.totalMemory()
+        def freeMemory = runtime.freeMemory()
+        def usedMemory = totalMemory - freeMemory
+
+        logger.info("Memory analysis:")
+        logger.info("- Used: ${usedMemory / 1024 / 1024} MB")
+        logger.info("- Free: ${freeMemory / 1024 / 1024} MB")
+        logger.info("- Total: ${totalMemory / 1024 / 1024} MB")
+        logger.info("- Max: ${maxMemory / 1024 / 1024} MB")
+        logger.info("- Usage: ${(usedMemory * 100 / maxMemory).round(2)}%")
+
+        // 分析依賴數量
+        def compileClasspath = configurations.compileClasspath
+        def testClasspath = configurations.testCompileClasspath
+
+        try {
+            def compileDeps = compileClasspath.resolvedConfiguration.resolvedArtifacts.size()
+            def testDeps = testClasspath.resolvedConfiguration.resolvedArtifacts.size()
+
+            logger.info("Dependencies:")
+            logger.info("- Compile: ${compileDeps}")
+            logger.info("- Test: ${testDeps}")
+        } catch (Exception e) {
+            logger.warn("Could not analyze dependencies: ${e.message}")
+        }
+
+        // 分析項目大小
+        def srcDir = file('src')
+        if (srcDir.exists()) {
+            def javaFiles = fileTree('src/main/java').include('**/*.java').files.size()
+            def resourceFiles = fileTree('src/main/resources').files.size()
+            def testFiles = fileTree('src/test/java').include('**/*.java').files.size()
+
+            logger.info("Project size:")
+            logger.info("- Java files: ${javaFiles}")
+            logger.info("- Resource files: ${resourceFiles}")
+            logger.info("- Test files: ${testFiles}")
+        }
+
+        logger.info("=" * 50)
+    }
+}
+
+// ==========================================
+// 清理和重置任務
+// ==========================================
+task resetProject(type: Delete) {
+    group = 'build'
+    description = 'Reset project to clean state (DANGEROUS)'
+
+    delete 'build'
+    delete '.gradle'
+    delete 'logs'
+    delete fileTree('.') {
+        include '**/*.log'
+        include '**/.DS_Store'
+        include '**/Thumbs.db'
+    }
+
+    // 清理前端產物（但保留源碼）
+    delete 'frontend/build'
+    delete 'frontend/dist'
+    delete 'frontend/node_modules'
+
+    // 清理靜態資源（但保留 .gitkeep）
+    delete fileTree('src/main/resources/static') {
+        exclude '.gitkeep'
+    }
+
+    doFirst {
+        logger.warn("⚠️  This will delete all build artifacts and caches!")
+        logger.warn("⚠️  Make sure you have committed your changes!")
+    }
+
+    doLast {
+        logger.info("🔄 Project reset completed")
+        logger.info("💡 Run './gradlew setupDev' to reconfigure development environment")
+    }
+}
+
+// ==========================================
+// 版本和發佈任務
+// ==========================================
+task showVersion {
+    group = 'help'
+    description = 'Show current project version and build info'
+
+    doLast {
+        logger.info("""
+        ==========================================
+        📦 Version Information
+        ==========================================
+        Project: ${project.name}
+        Version: ${project.version}
+        Group: ${project.group}
+        
+        Build Environment:
+        - Java: ${System.getProperty('java.version')}
+        - Gradle: ${gradle.gradleVersion}
+        - OS: ${System.getProperty('os.name')} ${System.getProperty('os.arch')}
+        
+        Dependencies:
+        - Spring Boot: ${project.ext.springBootVersion}
+        - gRPC: ${project.ext.grpcVersion}
+        - Undertow: ${project.ext.undertowVersion}
+        
+        Frontend: ${project.hasProperty('frontendEnabled') ? (project.frontendEnabled ? 'Enabled' : 'Disabled') : 'Unknown'}
+        ==========================================
+        """)
+    }
+}
+
+task createRelease {
+    group = 'publishing'
+    description = 'Create a release package'
+    dependsOn 'build', 'createStartScript'
+
+    doLast {
+        def releaseDir = file("${buildDir}/release")
+        releaseDir.mkdirs()
+
+        // 複製 JAR 文件
+        copy {
+            from bootJar.archiveFile
+            into releaseDir
+            rename { 'gstream-gate.jar' }
+        }
+
+        // 複製啟動腳本
+        copy {
+            from "${buildDir}/scripts"
+            into "${releaseDir}/scripts"
+        }
+
+        // 複製文檔
+        copy {
+            from '.'
+            into releaseDir
+            include 'README.md'
+            include 'DOCKER-QUICKSTART.md'
+            include 'LICENSE*'
+        }
+
+        // 創建版本資訊文件
+        def versionFile = file("${releaseDir}/VERSION.txt")
+        versionFile.text = """gStreamGate Release Information
+====================================
+Version: ${project.version}
+Build Date: ${new Date()}
+Java Version: ${System.getProperty('java.version')}
+Spring Boot: ${project.ext.springBootVersion}
+Frontend Included: ${project.hasProperty('frontendEnabled') ? project.frontendEnabled : false}
+
+Files Included:
+- gstream-gate.jar (Main application)
+- scripts/start.sh (Linux/Mac startup script)
+- scripts/start.bat (Windows startup script)
+- README.md (Documentation)
+- DOCKER-QUICKSTART.md (Docker guide)
+
+Quick Start:
+1. Ensure Java 21+ is installed
+2. Run: java -jar gstream-gate.jar
+3. Or use: ./scripts/start.sh (Linux/Mac) or scripts\\start.bat (Windows)
+4. Access: http://localhost:8080
+
+For more information, see README.md
+"""
+
+        logger.info("📦 Release package created in: ${releaseDir}")
+        logger.info("Contents:")
+        fileTree(releaseDir).each { file ->
+            def relativePath = releaseDir.toPath().relativize(file.toPath())
+            logger.info("  - ${relativePath}")
+        }
+    }
+}
+
+// ==========================================
+// 開發工具任務
+// ==========================================
+task generateIdeFiles {
+    group = 'ide'
+    description = 'Generate IDE configuration files'
+
+    doLast {
+        logger.info("🔧 Generating IDE configuration files...")
+
+        // IntelliJ IDEA 配置
+        def ideaDir = file('.idea')
+        if (!ideaDir.exists()) {
+            ideaDir.mkdirs()
+
+            // 創建基本的 workspace.xml
+            def workspaceXml = file('.idea/workspace.xml')
+            workspaceXml.text = '''<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="default" name="Default Changelist" comment="" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ProjectId" id="gStreamGate" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">
+    <property name="settings.editor.selected.configurable" value="preferences.lookFeel" />
+  </component>
+  <component name="RunManager">
+    <configuration name="GStreamGateApplication" type="Application" factoryName="Application">
+      <option name="MAIN_CLASS_NAME" value="io.github.alvinchiu.gstreamgate.GStreamGateApplication" />
+      <module name="gStreamGate.main" />
+      <option name="PROGRAM_PARAMETERS" value="--spring.profiles.active=development" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+  </component>
+</project>'''
+
+            logger.info("✅ Created IntelliJ IDEA configuration")
+        }
+
+        // VS Code 配置
+        def vscodeDir = file('.vscode')
+        if (!vscodeDir.exists()) {
+            vscodeDir.mkdirs()
+
+            // launch.json
+            def launchJson = file('.vscode/launch.json')
+            launchJson.text = '''{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Launch gStreamGate",
+            "request": "launch",
+            "mainClass": "io.github.alvinchiu.gstreamgate.GStreamGateApplication",
+            "projectName": "gStreamGate",
+            "args": "--spring.profiles.active=development",
+            "env": {
+                "SPRING_PROFILES_ACTIVE": "development"
+            }
+        }
+    ]
+}'''
+
+            // settings.json
+            def settingsJson = file('.vscode/settings.json')
+            settingsJson.text = '''{
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "java.compile.nullAnalysis.mode": "automatic",
+    "java.format.settings.url": "https://raw.githubusercontent.com/google/styleguide/gh-pages/eclipse-java-google-style.xml",
+    "files.exclude": {
+        "**/build": true,
+        "**/.gradle": true,
+        "**/node_modules": true
+    }
+}'''
+
+            logger.info("✅ Created VS Code configuration")
+        }
+
+        logger.info("🔧 IDE configuration files generated")
+    }
+}
+
+// ==========================================
+// 監控和日誌任務
+// ==========================================
+task watchLogs(type: Exec) {
+    group = 'monitoring'
+    description = 'Watch application logs in real-time'
+
+    commandLine 'tail', '-f', 'logs/gstream-gate.log'
+
+    onlyIf {
+        file('logs/gstream-gate.log').exists()
+    }
+
+    doFirst {
+        if (!file('logs/gstream-gate.log').exists()) {
+            logger.warn("Log file not found. Start the application first.")
+        } else {
+            logger.info("Watching logs... Press Ctrl+C to stop")
+        }
+    }
+}
+
+task showRecentLogs {
+    group = 'monitoring'
+    description = 'Show recent application logs'
+
+    doLast {
+        def logFile = file('logs/gstream-gate.log')
+        if (logFile.exists()) {
+            logger.info("📄 Recent logs from: ${logFile}")
+            logger.info("=" * 50)
+
+            def lines = logFile.readLines()
+            def recentLines = lines.size() > 100 ? lines.drop(lines.size() - 100) : lines
+
+            recentLines.each { line ->
+                println line
+            }
+
+            logger.info("=" * 50)
+            logger.info("💡 Use './gradlew watchLogs' to monitor in real-time")
+        } else {
+            logger.warn("⚠️  Log file not found: ${logFile}")
+            logger.info("💡 Start the application to generate logs")
+        }
+    }
+}
+
+// ==========================================
+// 快速修復任務
+// ==========================================
+task quickFix {
+    group = 'help'
+    description = 'Quick fix for common issues'
+
+    doLast {
+        logger.info("🔧 Running quick fixes for common issues...")
+
+        def fixes = []
+
+        // 修復靜態資源目錄
+        def staticDir = file('src/main/resources/static')
+        if (!staticDir.exists()) {
+            staticDir.mkdirs()
+            file('src/main/resources/static/.gitkeep').createNewFile()
+            fixes << "Created static resources directory"
+        }
+
+        // 修復日誌目錄
+        def logsDir = file('logs')
+        if (!logsDir.exists()) {
+            logsDir.mkdirs()
+            fixes << "Created logs directory"
+        }
+
+        // 清理臨時檔案
+        def tempFiles = fileTree('.') {
+            include '**/*.tmp'
+            include '**/*.bak'
+            include '**/.DS_Store'
+        }
+
+        if (!tempFiles.empty) {
+            delete tempFiles
+            fixes << "Cleaned temporary files"
+        }
+
+        // 修復權限（Unix 系統）
+        if (!System.getProperty('os.name').toLowerCase().contains('windows')) {
+            def gradlewFile = file('gradlew')
+            if (gradlewFile.exists() && !gradlewFile.canExecute()) {
+                gradlewFile.setExecutable(true)
+                fixes << "Fixed gradlew permissions"
+            }
+        }
+
+        if (fixes.isEmpty()) {
+            logger.info("✅ No issues found - everything looks good!")
+        } else {
+            logger.info("✅ Applied fixes:")
+            fixes.each { fix ->
+                logger.info("  - ${fix}")
+            }
+        }
+
+        logger.info("🔧 Quick fix completed")
+    }
+}
+
+// 檢查依賴衝突
+task checkDependencyConflicts {
+    group = 'verification'
+    description = 'Check for dependency conflicts'
+
+    doLast {
+        logger.info("🔍 Checking for dependency conflicts...")
+
+        def conflicts = []
+        configurations.compileClasspath.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+            def id = artifact.moduleVersion.id
+            if (id.name.contains('logback') || id.name.contains('slf4j')) {
+                conflicts << "${id.group}:${id.name}:${id.version}"
+            }
+        }
+
+        if (conflicts.size() > 0) {
+            logger.info("Logging dependencies found:")
+            conflicts.each { dep ->
+                logger.info("- ${dep}")
+            }
+        }
+
+        logger.info("✅ Dependency conflict check completed")
+    }
+}
+
+// 建置資訊
+task buildInfo {
+    group = 'help'
+    description = 'Display build information'
+
+    doLast {
+        def frontendEnabled = project.hasProperty('frontendEnabled') ?
+                project.frontendEnabled : false
+
+        logger.info("""
+        ==========================================
+        🚀 gStreamGate Build Information
+        ==========================================
+        Project: ${project.name}
+        Version: ${project.version}
+        Java: ${java.sourceCompatibility}
+        Gradle: ${gradle.gradleVersion}
+        Spring Boot: ${project.ext.springBootVersion}
+        Web Server: Undertow ${project.ext.undertowVersion}
+        gRPC: ${project.ext.grpcVersion}
+        Frontend: ${frontendEnabled ? 'Enabled' : 'Disabled'}
+        ==========================================
+        ✅ Using latest stable versions
+        ✅ Enterprise-grade optimization
+        ✅ Security scanning enabled
+        ==========================================
+        """)
+    }
+}

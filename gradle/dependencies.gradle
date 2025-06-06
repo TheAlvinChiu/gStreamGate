@@ -1,0 +1,103 @@
+// ==========================================
+// 依賴版本管理
+// ==========================================
+ext {
+    springBootVersion = '3.5.0'
+    grpcVersion = '1.68.1'
+    guavaVersion = '33.3.1-jre'
+    h2Version = '2.3.232'
+    slf4jVersion = '2.0.16'
+    logbackVersion = '1.5.12'
+    micrometerVersion = '1.13.6'
+    nettyVersion = '4.1.115.Final'
+    undertowVersion = '2.3.18.Final'
+    jacksonVersion = '2.18.1'
+    postgresqlVersion = '42.7.4'
+    junitVersion = '5.11.3'
+    testcontainersVersion = '1.20.4'
+}
+
+// ==========================================
+// 依賴定義
+// ==========================================
+dependencies {
+    // Spring Boot 核心（排除 Tomcat，使用 Undertow）
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation('org.springframework.boot:spring-boot-starter-web') {
+        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-tomcat'
+    }
+    implementation 'org.springframework.boot:spring-boot-starter-undertow'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // gRPC
+    implementation "io.grpc:grpc-netty-shaded:${grpcVersion}"
+    implementation "io.grpc:grpc-protobuf:${grpcVersion}"
+    implementation "io.grpc:grpc-stub:${grpcVersion}"
+    implementation "io.grpc:grpc-core:${grpcVersion}"
+
+    // JWT 認證
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+    // 資料庫
+    implementation "com.h2database:h2:${h2Version}"
+    runtimeOnly "org.postgresql:postgresql:${postgresqlVersion}"
+    implementation 'com.zaxxer:HikariCP'
+
+    // 工具庫
+    implementation "com.google.guava:guava:${guavaVersion}"
+    implementation 'org.apache.commons:commons-lang3:3.17.0'
+    implementation 'commons-io:commons-io:2.16.1'
+
+    // 日誌
+    implementation "org.slf4j:slf4j-api:${slf4jVersion}"
+    implementation "ch.qos.logback:logback-classic:${logbackVersion}"
+    implementation "ch.qos.logback:logback-core:${logbackVersion}"
+
+    // Jackson
+    implementation "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}"
+    implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${jacksonVersion}"
+
+    // 監控
+    implementation "io.micrometer:micrometer-core:${micrometerVersion}"
+    implementation "io.micrometer:micrometer-registry-prometheus:${micrometerVersion}"
+
+    // Apache Commons Pool2
+    implementation 'org.apache.commons:commons-pool2:2.12.0'
+
+    // Netty
+    implementation "io.netty:netty-buffer:${nettyVersion}"
+    implementation "io.netty:netty-transport:${nettyVersion}"
+    implementation "io.netty:netty-handler:${nettyVersion}"
+
+    // Resilience4j
+    implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
+    implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.2.0'
+
+    // 測試依賴
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation "io.grpc:grpc-testing:${grpcVersion}"
+    testImplementation 'org.awaitility:awaitility:4.2.2'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
+}
+
+// ==========================================
+// 依賴管理
+// ==========================================
+dependencyManagement {
+    imports {
+        mavenBom "io.grpc:grpc-bom:${grpcVersion}"
+        mavenBom "io.netty:netty-bom:${nettyVersion}"
+        mavenBom "io.micrometer:micrometer-bom:${micrometerVersion}"
+        mavenBom "org.testcontainers:testcontainers-bom:${testcontainersVersion}"
+        mavenBom "com.fasterxml.jackson:jackson-bom:${jacksonVersion}"
+        mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
+    }
+}

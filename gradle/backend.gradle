@@ -1,0 +1,228 @@
+// ==========================================
+// 後端開發和部署配置
+// ==========================================
+
+// 只啟動後端的開發任務
+task runBackendOnly(type: JavaExec) {
+    group = 'application'
+    description = 'Run backend only for development'
+
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'io.github.alvinchiu.gstreamgate.GStreamGateApplication'
+
+    jvmArgs = [
+            '-Dspring.profiles.active=development',
+            '-Dserver.port=5888',
+            '-Dio.undertow.disable-file-system-watcher=true',
+            '--add-opens=java.base/java.nio=ALL-UNNAMED'
+    ]
+
+    doFirst {
+        logger.info("""
+        🚀 Starting gStreamGate Backend
+        ==========================================
+        Backend URL:  http://localhost:5888
+        API Prefix:   http://localhost:5888/api
+        Health Check: http://localhost:5888/actuator/health
+        ==========================================
+        💡 Frontend should run separately:
+           cd frontend && npm start
+           Frontend URL: http://localhost:3000
+        ==========================================
+        """)
+    }
+}
+
+// 開發模式運行
+task runDev(type: JavaExec) {
+    group = 'application'
+    description = 'Run the application in development mode'
+
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'io.github.alvinchiu.gstreamgate.GStreamGateApplication'
+
+    jvmArgs = [
+            '-Dspring.profiles.active=development',
+            '-Dspring.devtools.restart.enabled=true',
+            '-Dio.undertow.disable-file-system-watcher=true',
+            '--add-opens=java.base/java.nio=ALL-UNNAMED'
+    ]
+
+    systemProperty 'server.undertow.threads.io', '4'
+    systemProperty 'server.undertow.threads.worker', '16'
+
+    doFirst {
+        logger.info('Starting gStreamGate in development mode...')
+    }
+}
+
+// ==========================================
+// 安全掃描配置
+// ==========================================
+dependencyCheck {
+    format = 'ALL'
+    outputDirectory = "${buildDir}/reports/dependency-check"
+    failBuildOnCVSS = 7.0
+    skipConfigurations = ['compileClasspath', 'testCompileClasspath']
+    skipTestGroups = true
+
+    analyzers {
+        nodeEnabled = false
+        nuspecEnabled = false
+        assemblyEnabled = false
+        msbuildEnabled = false
+    }
+}
+
+// ==========================================
+// 性能測試配置
+// ==========================================
+task performanceTest(type: Test) {
+    group = 'verification'
+    description = 'Run performance tests'
+
+    useJUnitPlatform {
+        includeTags 'performance'
+    }
+
+    jvmArgs = [
+            '-Xms512m', '-Xmx2048m',
+            '-XX:+UseG1GC',
+            '--add-opens=java.base/java.nio=ALL-UNNAMED'
+    ]
+
+    systemProperty 'spring.profiles.active', 'test'
+
+    reports {
+        html.required = true
+        junitXml.required = true
+    }
+}
+
+// ==========================================
+// Docker 支持
+// ==========================================
+task buildDockerContext(type: Copy) {
+    group = 'build'
+    description = 'Prepare Docker build context'
+    dependsOn bootJar
+
+    from bootJar.archiveFile
+    into "${buildDir}/docker"
+    rename { String fileName ->
+        'app.jar'
+    }
+
+    doLast {
+        logger.info("Docker context prepared in ${buildDir}/docker")
+    }
+}
+
+// ==========================================
+// 部署相關配置
+// ==========================================
+task packageForDeploy(type: Zip) {
+    group = 'build'
+    description = 'Package application for deployment'
+    dependsOn bootJar
+
+    from bootJar.archiveFile
+    from 'README.md'
+    from 'DOCKER-QUICKSTART.md'
+    from('scripts') {
+        into 'scripts'
+    }
+
+    archiveFileName = "${project.name}-${project.version}-deploy.zip"
+    destinationDirectory = file("${buildDir}/distributions")
+
+    doLast {
+        logger.info("Deployment package created: ${archiveFile.get()}")
+    }
+}
+
+// ==========================================
+// 品質檢查配置
+// ==========================================
+task checkCodeQuality {
+    group = 'verification'
+    description = 'Run code quality checks'
+    dependsOn check, jacocoTestReport
+
+    doLast {
+        def reportDir = file("${buildDir}/reports")
+        if (reportDir.exists()) {
+            logger.info("Quality reports available in: ${reportDir}")
+            logger.info("- Test results: ${buildDir}/reports/tests/test/index.html")
+            logger.info("- Coverage: ${buildDir}/reports/jacoco/test/html/index.html")
+        }
+    }
+}
+
+// ==========================================
+// 環境配置驗證
+// ==========================================
+task validateEnvironment {
+    group = 'verification'
+    description = 'Validate runtime environment'
+
+    doLast {
+        def javaVersion = System.getProperty('java.version')
+        def gradleVersion = gradle.gradleVersion
+
+        logger.info("Environment validation:")
+        logger.info("- Java version: ${javaVersion}")
+        logger.info("- Gradle version: ${gradleVersion}")
+        logger.info("- OS: ${System.getProperty('os.name')}")
+        logger.info("- Architecture: ${System.getProperty('os.arch')}")
+
+        // 檢查必要的系統屬性
+        def requiredProps = [
+                'java.version',
+                'user.home',
+                'java.io.tmpdir'
+        ]
+
+        requiredProps.each { prop ->
+            def value = System.getProperty(prop)
+            if (value) {
+                logger.info("- ${prop}: ${value}")
+            } else {
+                logger.error("- ${prop}: MISSING")
+            }
+        }
+
+        // 檢查可用內存
+        def runtime = Runtime.getRuntime()
+        def maxMemory = runtime.maxMemory()
+        def totalMemory = runtime.totalMemory()
+        def freeMemory = runtime.freeMemory()
+
+        logger.info("Memory status:")
+        logger.info("- Max memory: ${maxMemory / 1024 / 1024} MB")
+        logger.info("- Total memory: ${totalMemory / 1024 / 1024} MB")
+        logger.info("- Free memory: ${freeMemory / 1024 / 1024} MB")
+    }
+}
+
+// ==========================================
+// 清理擴展
+// ==========================================
+task deepClean(type: Delete) {
+    group = 'build'
+    description = 'Deep clean including caches and logs'
+    dependsOn clean
+
+    delete fileTree('.') {
+        include '**/*.log'
+        include '**/.DS_Store'
+        include '**/Thumbs.db'
+    }
+    delete 'logs'
+    delete '.gradle'
+    delete 'build'
+
+    doLast {
+        logger.info('Deep clean completed')
+    }
+}

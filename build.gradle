@@ -6,5 +6,141 @@ plugins {
     id 'org.owasp.dependencycheck' version '10.0.4'
 }
 
-apply from: 'build-frontend.gradle'
-apply from: 'build-backend.gradle'
+// ==========================================
+// 基本項目配置
+// ==========================================
+group = 'io.github.alvinchiu'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    sourceCompatibility = '21'
+    targetCompatibility = '21'
+}
+
+// ==========================================
+// 載入子配置模組（按依賴順序）
+// ==========================================
+apply from: 'gradle/dependencies.gradle'    // 依賴管理
+apply from: 'gradle/frontend.gradle'        // 前端建置
+apply from: 'gradle/backend.gradle'         // 後端配置
+apply from: 'gradle/tasks.gradle'           // 自定義任務
+
+// ==========================================
+// 全局配置
+// ==========================================
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+    all {
+        exclude group: 'org.apache.logging.log4j', module: 'log4j-core'
+        exclude group: 'org.apache.logging.log4j', module: 'log4j-to-slf4j'
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+// ==========================================
+// Spring Boot 打包配置
+// ==========================================
+jar {
+    enabled = false
+}
+
+bootJar {
+    enabled = true
+    archiveClassifier = ''
+
+    manifest {
+        attributes(
+                'Implementation-Title': project.name,
+                'Implementation-Version': project.version,
+                'Built-By': System.getProperty('user.name'),
+                'Built-Date': new Date().format('yyyy-MM-dd HH:mm:ss'),
+                'Built-JDK': System.getProperty('java.version'),
+                'Web-Server': 'Undertow',
+                'Frontend-Included': project.hasProperty('frontendEnabled') ? project.frontendEnabled : 'No'
+        )
+    }
+}
+
+// ==========================================
+// 測試配置
+// ==========================================
+tasks.named('test') {
+    useJUnitPlatform()
+
+    jvmArgs = [
+            '-Xms256m', '-Xmx1024m',
+            '-XX:+UseG1GC',
+            '--add-opens=java.base/java.nio=ALL-UNNAMED'
+    ]
+
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat = 'full'
+    }
+
+    finalizedBy jacocoTestReport
+}
+
+// ==========================================
+// JaCoCo 覆蓋率
+// ==========================================
+jacoco {
+    toolVersion = "0.8.12"
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+// ==========================================
+// 任務依賴關係統一管理
+// ==========================================
+afterEvaluate {
+    // 檢查前端是否啟用
+    boolean frontendEnabled = project.hasProperty('frontendEnabled') ?
+            project.frontendEnabled : false
+
+    logger.quiet("Frontend build enabled: ${frontendEnabled}")
+
+    // 設置前端建置依賴
+    if (frontendEnabled && tasks.findByName('buildFrontendAssets')) {
+        tasks.named('processResources').configure {
+            dependsOn 'buildFrontendAssets'
+        }
+        tasks.named('bootJar').configure {
+            dependsOn 'buildFrontendAssets'
+        }
+    }
+
+    // 設置清理依賴
+    if (tasks.findByName('cleanFrontend')) {
+        tasks.named('clean').configure {
+            dependsOn 'cleanFrontend'
+        }
+    }
+
+    // 設置建置驗證依賴
+    ['verifyDependencies', 'buildInfo'].each { taskName ->
+        if (tasks.findByName(taskName)) {
+            tasks.named('build').configure {
+                dependsOn taskName
+            }
+        }
+    }
+
+    // 設置 bootJar 後置任務
+    if (tasks.findByName('createStartScript')) {
+        tasks.named('bootJar').configure {
+            finalizedBy 'createStartScript'
+        }
+    }
+}

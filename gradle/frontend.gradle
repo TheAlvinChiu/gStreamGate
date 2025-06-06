@@ -1,0 +1,277 @@
+// ==========================================
+// 前端環境檢測
+// ==========================================
+ext.frontendDir = file('frontend')
+ext.packageJsonFile = file('frontend/package.json')
+ext.nodeModulesDir = file('frontend/node_modules')
+
+// 檢測前端目錄和 package.json
+ext.hasFrontendStructure = frontendDir.exists() && packageJsonFile.exists()
+
+// 檢測 Node.js
+ext.hasNodeJs = false
+try {
+    def process = ['node', '--version'].execute()
+    process.waitForOrKill(5000)
+    if (process.exitValue() == 0) {
+        ext.nodeVersion = process.text.trim()
+        ext.hasNodeJs = nodeVersion.startsWith('v')
+        logger.quiet("Node.js detected: ${nodeVersion}")
+    }
+} catch (Exception e) {
+    logger.warn("Node.js not found: ${e.message}")
+}
+
+// 檢測 npm
+ext.hasNpm = false
+if (hasNodeJs) {
+    try {
+        def process = ['npm', '--version'].execute()
+        process.waitForOrKill(5000)
+        if (process.exitValue() == 0) {
+            ext.npmVersion = process.text.trim()
+            ext.hasNpm = true
+            logger.quiet("npm detected: ${npmVersion}")
+        }
+    } catch (Exception e) {
+        logger.warn("npm not found: ${e.message}")
+    }
+}
+
+// 檢測建置工具類型
+ext.buildTool = 'unknown'
+ext.outputDir = 'frontend/build'
+
+if (hasFrontendStructure) {
+    try {
+        def packageJson = new groovy.json.JsonSlurper().parseText(packageJsonFile.text)
+        def buildScript = packageJson.scripts?.build ?: ''
+
+        if (buildScript.contains('vite')) {
+            ext.buildTool = 'vite'
+            ext.outputDir = 'frontend/dist'
+        } else if (buildScript.contains('react-scripts')) {
+            ext.buildTool = 'create-react-app'
+            ext.outputDir = 'frontend/build'
+        } else {
+            ext.buildTool = 'custom'
+        }
+
+        logger.quiet("Frontend build tool: ${buildTool}, output: ${outputDir}")
+    } catch (Exception e) {
+        logger.warn("Failed to parse package.json: ${e.message}")
+    }
+}
+
+// 決定是否啟用前端建置
+ext.frontendEnabled = hasFrontendStructure && hasNodeJs && hasNpm
+
+logger.quiet("""
+===========================================
+📦 Frontend Environment Status
+===========================================
+Frontend directory:    ${hasFrontendStructure ? '✅' : '❌'}
+Node.js available:      ${hasNodeJs ? '✅' : '❌'}
+npm available:          ${hasNpm ? '✅' : '❌'}
+Build tool:             ${buildTool}
+Output directory:       ${outputDir}
+Frontend enabled:       ${frontendEnabled ? '✅' : '❌'}
+===========================================
+""")
+
+// ==========================================
+// 前端任務定義
+// ==========================================
+
+task checkFrontendEnvironment {
+    group = 'frontend'
+    description = 'Check frontend build environment'
+
+    doLast {
+        logger.info("Frontend environment check completed")
+        logger.info("Frontend enabled: ${frontendEnabled}")
+    }
+}
+
+task cleanFrontend(type: Delete) {
+    group = 'frontend'
+    description = 'Clean frontend build artifacts'
+
+    delete 'frontend/build'
+    delete 'frontend/dist'
+    delete fileTree('src/main/resources/static') {
+        exclude '.gitkeep'
+    }
+
+    if (project.hasProperty('cleanNodeModules')) {
+        delete 'frontend/node_modules'
+    }
+
+    doLast {
+        logger.info('Frontend artifacts cleaned')
+    }
+}
+
+task installFrontendDeps(type: Exec) {
+    group = 'frontend'
+    description = 'Install frontend dependencies'
+
+    onlyIf { frontendEnabled }
+
+    workingDir 'frontend'
+    commandLine getCommand(['npm', 'ci', '--silent'])
+
+    inputs.files('frontend/package.json', 'frontend/package-lock.json')
+    outputs.dir('frontend/node_modules')
+
+    onlyIf {
+        !nodeModulesDir.exists() ||
+                packageJsonFile.lastModified() > nodeModulesDir.lastModified()
+    }
+
+    doFirst {
+        logger.info('Installing frontend dependencies...')
+    }
+
+    doLast {
+        logger.info('Frontend dependencies installed')
+    }
+}
+
+task buildFrontend(type: Exec) {
+    group = 'frontend'
+    description = 'Build frontend application'
+    dependsOn installFrontendDeps
+
+    onlyIf { frontendEnabled }
+
+    workingDir 'frontend'
+    commandLine getCommand(['npm', 'run', 'build'])
+
+    inputs.dir('frontend/src')
+    inputs.dir('frontend/public')
+    inputs.file('frontend/package.json')
+    outputs.dir(outputDir)
+
+    environment 'NODE_ENV', 'production'
+    environment 'GENERATE_SOURCEMAP', 'false'
+    environment 'CI', 'true'
+
+    doFirst {
+        logger.info("Building frontend with ${buildTool}...")
+    }
+
+    doLast {
+        if (!file(outputDir).exists()) {
+            throw new GradleException("Frontend build failed: ${outputDir} not created")
+        }
+        logger.info("Frontend build completed: ${outputDir}")
+    }
+}
+
+task copyFrontendAssets(type: Copy) {
+    group = 'frontend'
+    description = 'Copy frontend assets to static resources'
+    dependsOn buildFrontend
+
+    onlyIf { frontendEnabled && file(outputDir).exists() }
+
+    from outputDir
+    into 'src/main/resources/static'
+    exclude '**/*.map'
+
+    doFirst {
+        // 清理舊資源
+        delete fileTree('src/main/resources/static') {
+            exclude '.gitkeep'
+        }
+
+        // 確保目錄存在
+        file('src/main/resources/static').mkdirs()
+
+        logger.info("Copying frontend assets from ${outputDir}")
+    }
+
+    doLast {
+        def indexHtml = file('src/main/resources/static/index.html')
+        if (!indexHtml.exists()) {
+            throw new GradleException("Asset copy failed: index.html not found")
+        }
+
+        def fileCount = fileTree('src/main/resources/static').files.size()
+        logger.info("Copied ${fileCount} frontend assets")
+    }
+}
+
+task buildFrontendAssets {
+    group = 'frontend'
+    description = 'Complete frontend build pipeline'
+
+    if (frontendEnabled) {
+        dependsOn copyFrontendAssets
+    }
+
+    doLast {
+        if (frontendEnabled) {
+            logger.info('Frontend build pipeline completed')
+        } else {
+            logger.warn('Frontend build skipped - requirements not met')
+        }
+    }
+}
+
+task devFrontend(type: Exec) {
+    group = 'development'
+    description = 'Start frontend development server'
+    dependsOn installFrontendDeps
+
+    onlyIf { frontendEnabled }
+
+    workingDir 'frontend'
+    commandLine getCommand(['npm', 'start'])
+
+    doFirst {
+        logger.info('Starting frontend development server...')
+        logger.info('Frontend: http://localhost:3000')
+        logger.info('Backend should run on: http://localhost:5888')
+    }
+}
+
+// ==========================================
+// 輔助方法
+// ==========================================
+
+def getCommand(List<String> command) {
+    if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+        return [command[0] + '.cmd'] + command.tail()
+    }
+    return command
+}
+
+// ==========================================
+// 確保靜態資源目錄存在
+// ==========================================
+
+task ensureStaticDir {
+    group = 'setup'
+    description = 'Ensure static resources directory exists'
+
+    doLast {
+        def staticDir = file('src/main/resources/static')
+        if (!staticDir.exists()) {
+            staticDir.mkdirs()
+            logger.info('Created static resources directory')
+        }
+
+        def gitkeep = file('src/main/resources/static/.gitkeep')
+        if (!gitkeep.exists()) {
+            gitkeep.createNewFile()
+            logger.info('Created .gitkeep file')
+        }
+    }
+}
+
+// 確保靜態目錄在處理資源前存在
+tasks.named('processResources').configure {
+    dependsOn ensureStaticDir
+}
