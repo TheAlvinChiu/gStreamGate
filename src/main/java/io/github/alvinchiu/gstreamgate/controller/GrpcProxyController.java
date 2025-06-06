@@ -1,8 +1,7 @@
 package io.github.alvinchiu.gstreamgate.controller;
 
 import io.github.alvinchiu.gstreamgate.entity.GrpcProxyMap;
-import io.github.alvinchiu.gstreamgate.manager.DynamicGrpcProxyManager;
-import io.github.alvinchiu.gstreamgate.repository.GrpcProxyMapRepository;
+import io.github.alvinchiu.gstreamgate.service.GrpcProxyService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,22 +27,18 @@ import java.util.Map;
 public class GrpcProxyController {
     private static final Logger logger = LoggerFactory.getLogger(GrpcProxyController.class);
 
-    private final GrpcProxyMapRepository grpcProxyMapRepository;
-    private final DynamicGrpcProxyManager proxyManager;
+    private final GrpcProxyService grpcProxyService;
 
     @Autowired
-    public GrpcProxyController(GrpcProxyMapRepository grpcProxyMapRepository,
-                               DynamicGrpcProxyManager proxyManager) {
-        this.grpcProxyMapRepository = grpcProxyMapRepository;
-        this.proxyManager = proxyManager;
+    public GrpcProxyController(GrpcProxyService grpcProxyService) {
+        this.grpcProxyService = grpcProxyService;
         logger.info("GrpcProxyController initialized with enhanced security");
     }
 
     @PostConstruct
     public void init() {
         logger.info("GrpcProxyController @PostConstruct - Controller ready with JWT protection");
-        logger.info("Repository: {}", grpcProxyMapRepository != null ? "OK" : "NULL");
-        logger.info("ProxyManager: {}", proxyManager != null ? "OK" : "NULL");
+        logger.info("Service: {}", grpcProxyService != null ? "OK" : "NULL");
     }
 
     /**
@@ -73,7 +68,7 @@ public class GrpcProxyController {
         logger.info("GET /api/proxy - Getting all proxy mappings, requested by: {}", currentUser);
 
         try {
-            List<GrpcProxyMap> proxies = grpcProxyMapRepository.findAll();
+            List<GrpcProxyMap> proxies = grpcProxyService.getAllProxies();
             logger.info("Found {} proxy mappings for user: {}", proxies.size(), currentUser);
             return ResponseEntity.ok(proxies);
         } catch (Exception e) {
@@ -92,7 +87,7 @@ public class GrpcProxyController {
         logger.info("GET /api/proxy/enabled - Getting enabled proxy mappings, requested by: {}", currentUser);
 
         try {
-            List<GrpcProxyMap> proxies = grpcProxyMapRepository.findByEnable("Y");
+            List<GrpcProxyMap> proxies = grpcProxyService.getEnabledProxies();
             logger.info("Found {} enabled proxy mappings for user: {}", proxies.size(), currentUser);
             return ResponseEntity.ok(proxies);
         } catch (Exception e) {
@@ -111,15 +106,14 @@ public class GrpcProxyController {
         logger.info("GET /api/proxy/{} - Getting proxy by ID, requested by admin: {}", id, currentUser);
 
         try {
-            return grpcProxyMapRepository.findById(id)
-                    .map(proxy -> {
-                        logger.info("Found proxy mapping: {} for admin: {}", proxy.getProxyHostName(), currentUser);
-                        return ResponseEntity.ok(proxy);
-                    })
-                    .orElseGet(() -> {
-                        logger.warn("Proxy mapping not found with ID: {} for admin: {}", id, currentUser);
-                        return ResponseEntity.notFound().build();
-                    });
+            GrpcProxyMap proxy = grpcProxyService.getProxyById(id);
+            if (proxy != null) {
+                logger.info("Found proxy mapping: {} for admin: {}", proxy.getProxyHostName(), currentUser);
+                return ResponseEntity.ok(proxy);
+            } else {
+                logger.warn("Proxy mapping not found with ID: {} for admin: {}", id, currentUser);
+                return ResponseEntity.notFound().build();
+            }
         } catch (Exception e) {
             logger.error("Error getting proxy by ID {} for admin {}: {}", id, currentUser, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -137,21 +131,8 @@ public class GrpcProxyController {
                 proxyMap.getProxyHostName(), currentUser);
 
         try {
-            // Set creation metadata
-            proxyMap.setCreateDateTime(new Date());
-            proxyMap.setCreateUser(currentUser);
-
-            // Save to database
-            GrpcProxyMap savedProxy = grpcProxyMapRepository.save(proxyMap);
+            GrpcProxyMap savedProxy = grpcProxyService.createProxy(proxyMap, currentUser);
             logger.info("Created proxy mapping with ID: {} by admin: {}", savedProxy.getProxyMapId(), currentUser);
-
-            // Register with proxy manager if enabled
-            if ("Y".equals(savedProxy.getEnable())) {
-                proxyManager.addProxyMapping(savedProxy);
-                logger.info("Registered proxy mapping with manager: {} by admin: {}",
-                        savedProxy.getProxyHostName(), currentUser);
-            }
-
             return new ResponseEntity<>(savedProxy, HttpStatus.CREATED);
         } catch (Exception e) {
             logger.error("Error creating proxy mapping by admin {}: {}", currentUser, e.getMessage(), e);
@@ -169,41 +150,15 @@ public class GrpcProxyController {
         logger.info("PUT /api/proxy/{} - Updating proxy mapping by admin: {}", id, currentUser);
 
         try {
-            return grpcProxyMapRepository.findById(id)
-                    .map(existingProxy -> {
-                        // Update fields
-                        existingProxy.setServiceName(proxyMap.getServiceName());
-                        existingProxy.setProxyHostName(proxyMap.getProxyHostName());
-                        existingProxy.setTargetHostName(proxyMap.getTargetHostName());
-                        existingProxy.setTargetPort(proxyMap.getTargetPort());
-                        existingProxy.setConnectTimeoutMs(proxyMap.getConnectTimeoutMs());
-                        existingProxy.setSendTimeoutMs(proxyMap.getSendTimeoutMs());
-                        existingProxy.setReadTimeoutMs(proxyMap.getReadTimeoutMs());
-                        existingProxy.setSecureMode(proxyMap.getSecureMode());
-                        existingProxy.setServerCertContent(proxyMap.getServerCertContent());
-                        existingProxy.setServerKeyContent(proxyMap.getServerKeyContent());
-                        existingProxy.setAutoTrustUpstreamCerts(proxyMap.getAutoTrustUpstreamCerts());
-                        existingProxy.setTrustedCertsContent(proxyMap.getTrustedCertsContent());
-                        existingProxy.setEnable(proxyMap.getEnable());
-
-                        // Set update metadata
-                        existingProxy.setUpdateDateTime(new Date());
-                        existingProxy.setUpdateUser(currentUser);
-
-                        // Save to database
-                        GrpcProxyMap updatedProxy = grpcProxyMapRepository.save(existingProxy);
-                        logger.info("Updated proxy mapping: {} by admin: {}",
-                                updatedProxy.getProxyHostName(), currentUser);
-
-                        // Update proxy manager
-                        proxyManager.updateProxyMapping(updatedProxy);
-
-                        return ResponseEntity.ok(updatedProxy);
-                    })
-                    .orElseGet(() -> {
-                        logger.warn("Proxy mapping not found for update with ID: {} by admin: {}", id, currentUser);
-                        return ResponseEntity.notFound().build();
-                    });
+            GrpcProxyMap updatedProxy = grpcProxyService.updateProxy(id, proxyMap, currentUser);
+            if (updatedProxy != null) {
+                logger.info("Updated proxy mapping: {} by admin: {}",
+                        updatedProxy.getProxyHostName(), currentUser);
+                return ResponseEntity.ok(updatedProxy);
+            } else {
+                logger.warn("Proxy mapping not found for update with ID: {} by admin: {}", id, currentUser);
+                return ResponseEntity.notFound().build();
+            }
         } catch (Exception e) {
             logger.error("Error updating proxy mapping {} by admin {}: {}", id, currentUser, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -221,38 +176,23 @@ public class GrpcProxyController {
                 id, enable ? "Enabling" : "Disabling", currentUser);
 
         try {
-            return grpcProxyMapRepository.findById(id)
-                    .map(existingProxy -> {
-                        // Update enable status
-                        existingProxy.setEnable(enable ? "Y" : "N");
+            GrpcProxyMap updatedProxy = grpcProxyService.updateProxyStatus(id, enable, currentUser);
+            if (updatedProxy != null) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", true);
+                response.put("message", "Proxy " + (enable ? "enabled" : "disabled") + " successfully");
+                response.put("proxy", updatedProxy);
+                response.put("admin", currentUser);
 
-                        // Set update metadata
-                        existingProxy.setUpdateDateTime(new Date());
-                        existingProxy.setUpdateUser(currentUser);
+                logger.info("Proxy {} {} by admin {}: {}", updatedProxy.getProxyMapId(),
+                        enable ? "enabled" : "disabled", currentUser, updatedProxy.getProxyHostName());
 
-                        // Save to database
-                        GrpcProxyMap updatedProxy = grpcProxyMapRepository.save(existingProxy);
-
-                        // Update proxy manager
-                        proxyManager.updateProxyMapping(updatedProxy);
-
-                        // Return success message
-                        Map<String, Object> response = new HashMap<>();
-                        response.put("success", true);
-                        response.put("message", "Proxy " + (enable ? "enabled" : "disabled") + " successfully");
-                        response.put("proxy", updatedProxy);
-                        response.put("admin", currentUser);
-
-                        logger.info("Proxy {} {} by admin {}: {}", updatedProxy.getProxyMapId(),
-                                enable ? "enabled" : "disabled", currentUser, updatedProxy.getProxyHostName());
-
-                        return ResponseEntity.ok(response);
-                    })
-                    .orElseGet(() -> {
-                        logger.warn("Proxy mapping not found for status update with ID: {} by admin: {}",
-                                id, currentUser);
-                        return ResponseEntity.notFound().build();
-                    });
+                return ResponseEntity.ok(response);
+            } else {
+                logger.warn("Proxy mapping not found for status update with ID: {} by admin: {}",
+                        id, currentUser);
+                return ResponseEntity.notFound().build();
+            }
         } catch (Exception e) {
             logger.error("Error updating proxy status {} by admin {}: {}", id, currentUser, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -269,22 +209,15 @@ public class GrpcProxyController {
         logger.info("DELETE /api/proxy/{} - Deleting proxy mapping by admin: {}", id, currentUser);
 
         try {
-            return grpcProxyMapRepository.findById(id)
-                    .map(proxy -> {
-                        // Delete from database
-                        grpcProxyMapRepository.delete(proxy);
-
-                        // Delete from proxy manager
-                        proxyManager.deleteProxyMapping(proxy);
-
-                        logger.info("Deleted proxy mapping: {} by admin: {}", proxy.getProxyHostName(), currentUser);
-                        return ResponseEntity.noContent().<Void>build();
-                    })
-                    .orElseGet(() -> {
-                        logger.warn("Proxy mapping not found for deletion with ID: {} by admin: {}",
-                                id, currentUser);
-                        return ResponseEntity.notFound().build();
-                    });
+            boolean deleted = grpcProxyService.deleteProxy(id);
+            if (deleted) {
+                logger.info("Deleted proxy mapping with ID: {} by admin: {}", id, currentUser);
+                return ResponseEntity.noContent().<Void>build();
+            } else {
+                logger.warn("Proxy mapping not found for deletion with ID: {} by admin: {}",
+                        id, currentUser);
+                return ResponseEntity.notFound().build();
+            }
         } catch (Exception e) {
             logger.error("Error deleting proxy mapping {} by admin {}: {}", id, currentUser, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -301,7 +234,7 @@ public class GrpcProxyController {
         logger.info("POST /api/proxy/refresh - Refreshing all proxy mappings by admin: {}", currentUser);
 
         try {
-            proxyManager.refreshProxyMappings();
+            grpcProxyService.refreshProxies();
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -334,7 +267,7 @@ public class GrpcProxyController {
         logger.info("GET /api/proxy/active - Getting active proxy hostnames by user: {}", currentUser);
 
         try {
-            List<String> activeHostnames = proxyManager.getActiveProxyHostnames();
+            List<String> activeHostnames = grpcProxyService.getActiveProxyHostnames();
 
             Map<String, Object> response = new HashMap<>();
             response.put("count", activeHostnames.size());
@@ -371,8 +304,7 @@ public class GrpcProxyController {
             Map<String, Object> response = new HashMap<>();
             response.put("status", "UP");
             response.put("controller", "GrpcProxyController");
-            response.put("repository", grpcProxyMapRepository != null ? "OK" : "FAIL");
-            response.put("proxyManager", proxyManager != null ? "OK" : "FAIL");
+            response.put("service", grpcProxyService != null ? "OK" : "FAIL");
             response.put("user", currentUser);
             response.put("timestamp", new Date());
 

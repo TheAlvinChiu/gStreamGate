@@ -42,6 +42,8 @@ class AuthServiceTest {
     @Test
     void loginReturnsTokenAndUpdatesLastLogin() throws Exception {
         User user = new User("user","pass","user@example.com");
+        when(userRepository.findByUsername("user")).thenReturn(java.util.Optional.of(user));
+        when(passwordEncoder.matches("pass", "pass")).thenReturn(true);
         Authentication auth = new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
         when(authenticationManager.authenticate(any())).thenReturn(auth);
         when(jwtUtil.generateToken(user)).thenReturn("token123");
