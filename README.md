@@ -6,11 +6,34 @@
 
 **Enterprise-Grade gRPC Proxy Gateway with Intelligent Management**
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/alvinchiu/gstream-gate) [![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/alvinchiu/gstream-gate/releases) [![License](https://img.shields.io/badge/license-MIT-green)](https://claude.ai/chat/LICENSE) [![Java](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/projects/jdk/21/) [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.0-brightgreen)](https://spring.io/projects/spring-boot) [![React](https://img.shields.io/badge/React-18.2.0-blue)](https://reactjs.org/) [![Docker](https://img.shields.io/badge/Docker-ready-blue)](https://www.docker.com/)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/alvinchiu/gstream-gate) [![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/alvinchiu/gstream-gate/releases) [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE) [![Java](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/projects/jdk/21/) [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.0-brightgreen)](https://spring.io/projects/spring-boot) [![React](https://img.shields.io/badge/React-18.2.0-blue)](https://reactjs.org/) [![Docker](https://img.shields.io/badge/Docker-ready-blue)](https://www.docker.com/)
 
-[Quick Start](https://claude.ai/chat/6df02bfb-41c1-4eb3-977f-f42124e625c4#quick-start) • [Documentation](https://claude.ai/chat/6df02bfb-41c1-4eb3-977f-f42124e625c4#usage) • [API Reference](https://claude.ai/chat/6df02bfb-41c1-4eb3-977f-f42124e625c4#api-reference) • [Contributing](https://claude.ai/chat/6df02bfb-41c1-4eb3-977f-f42124e625c4#contributing)
+[Quick Start](#quick-start) • [Documentation](#usage) • [API Reference](#api-reference) • [Contributing](#contributing)
+
+**Language:** English | [繁體中文](README_zh-TW.md)
 
 </div>
+
+## 💖 Support This Project
+
+If you find gStreamGate useful and would like to support its development, consider making a donation:
+
+<div align="center">
+
+**USDT Donation (TRC20)**
+
+[![Donate USDT](https://img.shields.io/badge/Donate-USDT%20TRC20-green?style=for-the-badge&logo=tether)](https://tronscan.org/#/address/TCA9oxDKZXbSTH7McTfsEhET4QJ4qtT1AC)
+
+```
+TCA9oxDKZXbSTH7McTfsEhET4QJ4qtT1AC
+```
+
+*Your support helps maintain and improve this open-source project! 🙏*
+
+</div>
+
+---
+
 
 ## Overview
 
@@ -93,7 +116,7 @@ graph TB
 
 - Docker 20.10+ and Docker Compose 2.0+
 - 2GB+ available memory
-- Ports 8080, 9191 available
+- Ports 5888, 9092 available
 
 ### Docker Quick Start (Recommended)
 
@@ -102,19 +125,17 @@ graph TB
 git clone https://github.com/alvinchiu/gstream-gate.git
 cd gstream-gate
 
-# Start with Docker Compose (includes monitoring)
-./docker-build.sh latest compose-up
-
-# Or run standalone container
-./docker-build.sh latest run
+# Build and run with Docker
+docker build -t gstreamgate:latest .
+docker run -d --name gstream-gate -p 5888:5888 -p 9092:9092 gstreamgate:latest
 ```
 
 **Access Points:**
 
-- Web Interface: http://localhost:8080
-- gRPC Proxy: localhost:9191
-- Health Check: http://localhost:8080/actuator/health
-- Metrics: http://localhost:8080/actuator/prometheus
+- Web Interface: http://localhost:5888
+- gRPC Proxy: localhost:9092
+- Health Check: http://localhost:5888/actuator/health
+- Metrics: http://localhost:5888/actuator/prometheus
 
 **Default Credentials:**
 
@@ -125,7 +146,7 @@ cd gstream-gate
 
 ```bash
 # Backend (requires Java 21+)
-./gradlew runBackendOnly
+./gradlew bootRun
 
 # Frontend (requires Node.js 18+)
 cd frontend
@@ -141,8 +162,8 @@ npm start
 # Production deployment with external database
 docker run -d \
   --name gstream-gate \
-  -p 8080:8080 \
-  -p 9191:9191 \
+  -p 5888:5888 \
+  -p 9092:9092 \
   -e SPRING_PROFILES_ACTIVE=production \
   -e DB_USERNAME=gstreamgate \
   -e DB_PASSWORD=your_secure_password \
@@ -159,8 +180,8 @@ docker run -d \
 # Run the JAR file
 java -jar build/libs/gstream-gate-proxy-*.jar \
   --spring.profiles.active=production \
-  --server.port=8080 \
-  --grpc.proxy.server.port=9191
+  --server.port=5888 \
+  --grpc.proxy.server.port=9092
 ```
 
 ### Environment Configuration
@@ -175,8 +196,8 @@ SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/gstreamgate
 
 # Application Settings
 SPRING_PROFILES_ACTIVE=production
-SERVER_PORT=8080
-GRPC_PROXY_SERVER_PORT=9191
+SERVER_PORT=5888
+GRPC_PROXY_SERVER_PORT=9092
 
 # Security
 JWT_SECRET=your_jwt_secret_key_here
@@ -236,7 +257,7 @@ app:
 
 ### Web Interface
 
-1. **Access Dashboard**: Navigate to http://localhost:8080
+1. **Access Dashboard**: Navigate to http://localhost:5888
 2. **Login**: Use admin/password for full access
 3. **Manage Proxies**: Create, edit, and monitor proxy configurations
 4. **View Metrics**: Monitor system health and performance
@@ -245,12 +266,12 @@ app:
 
 ```bash
 # Authenticate
-curl -X POST http://localhost:8080/api/auth/login \
+curl -X POST http://localhost:5888/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"password"}'
 
 # Create proxy mapping
-curl -X POST http://localhost:8080/api/proxy \
+curl -X POST http://localhost:5888/api/proxy \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -264,7 +285,7 @@ curl -X POST http://localhost:8080/api/proxy \
 
 # List all proxies
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/proxy
+  http://localhost:5888/api/proxy
 ```
 
 ### gRPC Client Configuration
@@ -274,7 +295,7 @@ Configure your gRPC clients to connect through the proxy:
 ```java
 // Java gRPC client example
 ManagedChannel channel = ManagedChannelBuilder
-    .forAddress("localhost", 9191)
+    .forAddress("localhost", 9092)
     .usePlaintext() // or use TLS if configured
     .build();
 
@@ -293,7 +314,7 @@ git clone https://github.com/alvinchiu/gstream-gate.git
 cd gstream-gate
 
 # Backend development
-./gradlew runBackendOnly  # Starts on port 5888
+./gradlew bootRun  # Starts on port 5888
 
 # Frontend development (separate terminal)
 cd frontend
@@ -336,11 +357,11 @@ npm start  # Starts on port 3000
 
 ```bash
 # Application health
-curl http://localhost:8080/actuator/health
+curl http://localhost:5888/actuator/health
 
 # Detailed health with authentication
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/actuator/health
+  http://localhost:5888/actuator/health
 ```
 
 ### Metrics Collection
@@ -349,7 +370,7 @@ The application exports metrics in Prometheus format:
 
 ```bash
 # Prometheus metrics endpoint
-curl http://localhost:8080/actuator/prometheus
+curl http://localhost:5888/actuator/prometheus
 ```
 
 Key metrics include:
@@ -370,10 +391,10 @@ Logs are structured and include:
 
 ```bash
 # View logs in Docker
-docker logs gstream-gate-app
+docker logs gstream-gate
 
 # Follow logs
-docker logs -f gstream-gate-app
+docker logs -f gstream-gate
 ```
 
 ## API Reference
@@ -503,17 +524,17 @@ app:
 
 ```bash
 # Check if proxy is running
-curl http://localhost:8080/actuator/health
+curl http://localhost:5888/actuator/health
 
 # Verify gRPC port
-netstat -tlnp | grep 9191
+netstat -tlnp | grep 9092
 ```
 
 **2. Authentication Failed**
 
 ```bash
 # Verify JWT token
-curl -X POST http://localhost:8080/api/auth/validate \
+curl -X POST http://localhost:5888/api/auth/validate \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -521,7 +542,7 @@ curl -X POST http://localhost:8080/api/auth/validate \
 
 ```bash
 # Check memory metrics
-curl http://localhost:8080/actuator/metrics/jvm.memory.used
+curl http://localhost:5888/actuator/metrics/jvm.memory.used
 
 # Enable memory optimization
 export JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
@@ -546,7 +567,7 @@ logging:
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guidelines](https://claude.ai/chat/CONTRIBUTING.md) for details.
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
 
 ### Development Workflow
 
@@ -567,12 +588,12 @@ We welcome contributions! Please see our [Contributing Guidelines](https://claud
 
 ### License
 
-This project is licensed under the MIT License - see the [LICENSE](https://claude.ai/chat/LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ### Credits
 
 - **Author**: Alvin Chiu ([@thealvin](https://github.com/thealvin))
-- **Contributors**: See [CONTRIBUTORS.md](https://claude.ai/chat/CONTRIBUTORS.md)
+- **Contributors**: See [CONTRIBUTORS.md](CONTRIBUTORS.md)
 - **Powered by**: Spring Boot, React, gRPC, and the amazing open-source community
 
 ### Acknowledgments
@@ -582,12 +603,31 @@ This project is licensed under the MIT License - see the [LICENSE](https://claud
 - React team for the fantastic UI library
 - All contributors and users of this project
 
-------
+## 💖 Donations
+
+If this project has been helpful to you, please consider supporting its continued development:
+
+**USDT (TRC20):** `TCA9oxDKZXbSTH7McTfsEhET4QJ4qtT1AC`
+
+Your generosity helps keep this project alive and thriving! 🙏
+
+<script 
+  src="https://www.paypal.com/sdk/js?client-id=BAAtAnV5amnaxmsNItgXS1F2_3qEiR7VVnh0BfrmharJh-dwNsgcKyck6sw265HpiQSZopYK42hzXai_lo&components=hosted-buttons&disable-funding=venmo&currency=USD">
+</script>
+
+<div id="paypal-container-SLPZG6EWCK7VQ"></div>
+<script>
+  paypal.HostedButtons({
+    hostedButtonId: "SLPZG6EWCK7VQ",
+  }).render("#paypal-container-SLPZG6EWCK7VQ")
+</script>
+
+---
 
 <div align="center">
 
 **Made with ❤️ for the gRPC community**
 
-[⬆ Back to Top](https://claude.ai/chat/6df02bfb-41c1-4eb3-977f-f42124e625c4#gstreamgate)
+[⬆ Back to Top](#gstreamgate)
 
 </div>
