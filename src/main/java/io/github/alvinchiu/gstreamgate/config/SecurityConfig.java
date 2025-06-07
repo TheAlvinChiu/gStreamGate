@@ -78,6 +78,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authz -> {
                     logger.info("Setting up authorization rules");
 
+                    // 錯誤頁面 - 無需認證
+                    authz.requestMatchers("/error").permitAll();
+
+                    // 靜態資源 - 無需認證 (放在最前面)
+                    authz.requestMatchers("/", "/index.html", "/static/**", "/favicon.ico", "/manifest.json", "/robots.txt", 
+                                         "/logo192.png", "/logo512.png", "/asset-manifest.json").permitAll();
+
                     // 公開端點 - 僅認證相關
                     authz.requestMatchers("/api/auth/login", "/api/auth/register").permitAll();
 

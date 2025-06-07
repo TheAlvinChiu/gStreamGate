@@ -1,166 +1,97 @@
 # ==========================================
-# Docker 構建排除文件
-# 優化構建性能和安全性
+# Docker Build Context Optimization
 # ==========================================
 
-# ==========================================
-# 版本控制
-# ==========================================
-.git/
+# Git
+.git
 .gitignore
 .gitattributes
-.github/
 
-# ==========================================
-# IDE 和編輯器文件
-# ==========================================
-.idea/
+# Documentation
+README.md
+CHANGELOG.md
+LICENSE
+docs/
+*.md
+
+# IDE and Editor files
 .vscode/
+.idea/
 *.swp
 *.swo
-*.tmp
-*.bak
 *~
+
+# Operating System
 .DS_Store
 Thumbs.db
+*.tmp
+*.temp
 
-# ==========================================
-# Gradle 構建文件（保留必要的）
-# ==========================================
+# Build artifacts (will be built inside container)
 build/
-.gradle/
-gradle-app.setting
-!gradle/wrapper/
-!gradlew
-!gradlew.bat
+target/
+dist/
+*.jar
+*.war
 
-# ==========================================
-# 日志和輸出文件
-# ==========================================
+# Gradle
+.gradle/
+gradlew.bat
+
+# Node.js (frontend will be built inside container)
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# Application logs
 logs/
 *.log
-*.out
-*.err
 
-# ==========================================
-# 測試和覆蓋率報告
-# ==========================================
+# Testing
 coverage/
-jacoco.exec
 test-results/
-reports/
+.nyc_output/
 
-# ==========================================
-# Docker 相關文件
-# ==========================================
+# Temporary files
+tmp/
+temp/
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Docker
 Dockerfile.*
 docker-compose*.yml
 .dockerignore
 
-# ==========================================
-# 文檔和說明文件
-# ==========================================
-README.md
-LICENSE
-CHANGELOG.md
-docs/
-*.md
-
-# ==========================================
-# 配置和腳本文件
-# ==========================================
-*.sh
-*.bat
-*.ps1
-.env
-.env.*
-docker-build.sh
-deployment/
-scripts/
-
-# ==========================================
-# 監控和運維文件
-# ==========================================
+# Monitoring and deployment
 monitoring/
-prometheus/
-grafana/
 nginx/
-
-# ==========================================
-# 臨時文件和緩存
-# ==========================================
-tmp/
-temp/
-cache/
-.cache/
-node_modules/
-*.pid
-*.lock
-
-# ==========================================
-# 安全相關文件
-# ==========================================
-*.key
-*.pem
-*.crt
-*.p12
-*.jks
-secrets/
-certificates/
-
-# ==========================================
-# 數據庫文件
-# ==========================================
-*.db
-*.sqlite
-*.sqlite3
-data/
-database/
-
-# ==========================================
-# 備份文件
-# ==========================================
-*.backup
-*.sql.gz
-backup/
-
-# ==========================================
-# 打包文件
-# ==========================================
-*.tar
-*.tar.gz
-*.zip
-*.rar
-*.7z
-
-# ==========================================
-# 系統文件
-# ==========================================
-.fuse_hidden*
-.directory
-.Trash-*
-.nfs*
-
-# ==========================================
-# 特定於項目的排除
-# ==========================================
-# 如果有特定的配置文件不想包含在 Docker 鏡像中
-application-local.yml
-application-dev.yml
-application-secret.yml
-
-# 開發環境特定文件
-dev/
-local/
-sandbox/
-
-# 性能測試和壓力測試
-stress-test/
-load-test/
-benchmark/
-
-# 部署相關文件
 k8s/
-kubernetes/
-helm/
-terraform/
+deployment/
+
+# Backup files
+*.bak
+*.backup
+
+# Cache directories
+.cache/
+.npm/
+.yarn/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock

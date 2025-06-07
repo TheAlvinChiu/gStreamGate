@@ -4,22 +4,32 @@
 # ==========================================
 
 # ==========================================
-# Stage 1: Frontend Build Environment
+# Stage 1: Frontend Build Environment (優化版)
 # ==========================================
-FROM node:21-alpine AS frontend-builder
+FROM node:18-alpine AS frontend-builder
 
 # 設置工作目錄
 WORKDIR /frontend
 
-# 設置 Node.js 環境變數
+# 設置 Node.js 環境變數和優化配置
 ENV NODE_ENV=production
 ENV GENERATE_SOURCEMAP=false
+ENV CI=true
+ENV npm_config_cache=/tmp/.npm
+ENV npm_config_prefer_offline=true
+
+# 安裝必要的系統依賴
+RUN apk add --no-cache git python3 make g++
+
+# 使用國內鏡像源加速下載
+RUN npm config set registry https://registry.npmmirror.com
 
 # 複製前端套件配置檔案（利用 Docker 快取層）
 COPY frontend/package*.json ./
 
-# 安裝前端依賴
-RUN npm ci --only=production --silent
+# 安裝前端依賴 (優化版本)
+RUN npm ci --omit=dev --prefer-offline --no-audit --no-fund --silent && \
+    npm cache clean --force
 
 # 複製前端原始碼
 COPY frontend/ .
@@ -27,7 +37,7 @@ COPY frontend/ .
 # 建置前端應用程式
 RUN npm run build && \
     # 驗證建置結果
-    ls -la dist/ && \
+    ls -la build/ && \
     echo "✅ Frontend build completed"
 
 # ==========================================
@@ -56,7 +66,7 @@ RUN ./gradlew dependencies --no-daemon --quiet
 COPY src/ src/
 
 # 複製前端建置結果到 Spring Boot 靜態資源目錄
-COPY --from=frontend-builder /frontend/dist/ src/main/resources/static/
+COPY --from=frontend-builder /frontend/build/ src/main/resources/static/
 
 # 建置後端應用程式
 RUN ./gradlew bootJar --no-daemon --quiet && \
@@ -105,8 +115,8 @@ RUN mkdir -p /app/logs && \
 # 複製 JAR 檔案
 COPY --from=backend-builder --chown=appuser:appgroup /app/app.jar /app/app.jar
 
-# 驗證 JAR 檔案和靜態資源
-RUN java -jar /app/app.jar --version 2>/dev/null || echo "JAR file ready" && \
+# 驗證 JAR 檔案
+RUN java -jar /app/app.jar --help 2>/dev/null || echo "JAR file ready" && \
     echo "Container build completed successfully"
 
 # ==========================================
@@ -144,7 +154,7 @@ ENV GRPC_OPTS="-Dio.grpc.netty.shaded.io.grpc.netty.useCustomAllocator=true"
 # Spring Boot 應用程式配置
 ENV SPRING_OPTS="--spring.profiles.active=production \
     --server.port=8080 \
-    --grpc.proxy.server.port=9191 \
+    --grpc.proxy.server.port=9092 \
     --server.undertow.threads.io=8 \
     --server.undertow.threads.worker=64 \
     --server.undertow.buffer-size=16384 \
@@ -171,7 +181,7 @@ ENV APP_ARGS="$SPRING_OPTS $HEALTH_CHECK_OPTS $LOGGING_OPTS"
 # ==========================================
 
 # 暴露埠號
-EXPOSE 8080 9191
+EXPOSE 8080 9092
 
 # 健康檢查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
@@ -196,9 +206,7 @@ LABEL maintainer="Alvin Chiu <thealvin@gmail.com>" \
       org.opencontainers.image.vendor="AlvinChiu" \
       org.opencontainers.image.source="https://github.com/TheAlvinChiu/gStreamGate.git" \
       org.opencontainers.image.documentation="https://github.com/alvinchiu/gstream-gate-proxy/README.md" \
-      org.opencontainers.image.created="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-      org.opencontainers.image.revision="$(git rev-parse HEAD 2>/dev/null || echo 'unknown')" \
       org.opencontainers.image.licenses="MIT" \
-      app.frontend.framework="Vite + React + TypeScript" \
+      app.frontend.framework="React + TypeScript" \
       app.backend.framework="Spring Boot 3.5.0 + Undertow" \
       app.features="gRPC代理,Web管理介面,企業級安全,效能優化"

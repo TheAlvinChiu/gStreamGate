@@ -16,9 +16,7 @@ import {
   RefreshCw,
   CheckCircle,
   XCircle,
-  AlertTriangle,
-  Search,
-  Filter
+  Search
 } from 'lucide-react';
 
 // ===========================================
@@ -572,7 +570,25 @@ const ProxyManagement: React.FC = () => {
 
   const isAdmin = user?.username === 'admin' || user?.role === 'ADMIN';
 
-  const fetchProxies = async () => {
+  useEffect(() => {
+    const fetchProxies = async () => {
+      try {
+        const data = await ProxyService.getAllProxies(token!);
+        setProxies(data);
+      } catch (error) {
+        console.error('載入代理列表錯誤:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (token) {
+      fetchProxies();
+    }
+  }, [token]);
+
+  const refreshProxies = async () => {
+    setLoading(true);
     try {
       const data = await ProxyService.getAllProxies(token!);
       setProxies(data);
@@ -583,17 +599,13 @@ const ProxyManagement: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    fetchProxies();
-  }, [token]);
-
   const handleStatusToggle = async (proxy: any) => {
     if (!isAdmin) return;
 
     try {
       const newStatus = proxy.enable === 'Y' ? false : true;
       await ProxyService.updateProxyStatus(token!, proxy.proxyMapId, newStatus);
-      fetchProxies();
+      refreshProxies();
     } catch (error) {
       console.error('切換狀態錯誤:', error);
     }
@@ -605,7 +617,7 @@ const ProxyManagement: React.FC = () => {
     if (window.confirm(`確定要刪除代理 "${proxy.proxyHostName}" 嗎？`)) {
       try {
         await ProxyService.deleteProxy(token!, proxy.proxyMapId);
-        fetchProxies();
+        refreshProxies();
       } catch (error) {
         console.error('刪除代理錯誤:', error);
       }
@@ -634,7 +646,7 @@ const ProxyManagement: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">代理管理</h1>
           <div className="flex space-x-3">
             <button
-                onClick={fetchProxies}
+                onClick={refreshProxies}
                 className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
             >
               <RefreshCw className="h-4 w-4" />
@@ -792,7 +804,7 @@ const ProxyManagement: React.FC = () => {
                   setEditingProxy(null);
                 }}
                 onSave={() => {
-                  fetchProxies();
+                  refreshProxies();
                   setShowCreateModal(false);
                   setEditingProxy(null);
                 }}

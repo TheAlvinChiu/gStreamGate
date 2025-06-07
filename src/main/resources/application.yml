@@ -82,7 +82,7 @@ grpc:
 # 服務器配置 - Undertow 優化
 # ==========================================
 server:
-  port: 5888
+  port: 8080
   compression:
     enabled: true
     mime-types: application/json,application/xml,text/html,text/xml,text/plain,application/javascript,text/css
