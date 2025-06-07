@@ -116,7 +116,7 @@ graph TB
 
 - Docker 20.10+ 與 Docker Compose 2.0+
 - 2GB+ 可用記憶體
-- 埠號 5888、9092 可用
+- 埠號 8080、9092 可用
 
 ### Docker 快速啟動（建議）
 
@@ -127,15 +127,15 @@ cd gstream-gate
 
 # 使用 Docker 建置並執行
 docker build -t gstreamgate:latest .
-docker run -d --name gstream-gate -p 5888:5888 -p 9092:9092 gstreamgate:latest
+docker run -d --name gstream-gate -p 8080:8080 -p 9092:9092 gstreamgate:latest
 ```
 
 **存取點：**
 
-- 網頁介面：http://localhost:5888
+- 網頁介面：http://localhost:8080
 - gRPC 代理：localhost:9092
-- 健康檢查：http://localhost:5888/actuator/health
-- 指標：http://localhost:5888/actuator/prometheus
+- 健康檢查：http://localhost:8080/actuator/health
+- 指標：http://localhost:8080/actuator/prometheus
 
 **預設帳戶：**
 
@@ -162,7 +162,7 @@ npm start
 # 正式環境部署搭配外部資料庫
 docker run -d \
   --name gstream-gate \
-  -p 5888:5888 \
+  -p 8080:8080 \
   -p 9092:9092 \
   -e SPRING_PROFILES_ACTIVE=production \
   -e DB_USERNAME=gstreamgate \
@@ -180,7 +180,7 @@ docker run -d \
 # 執行 JAR 檔案
 java -jar build/libs/gstream-gate-proxy-*.jar \
   --spring.profiles.active=production \
-  --server.port=5888 \
+  --server.port=8080 \
   --grpc.proxy.server.port=9092
 ```
 
@@ -196,7 +196,7 @@ SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/gstreamgate
 
 # 應用程式設定
 SPRING_PROFILES_ACTIVE=production
-SERVER_PORT=5888
+SERVER_PORT=8080
 GRPC_PROXY_SERVER_PORT=9092
 
 # 安全性
@@ -257,7 +257,7 @@ app:
 
 ### 網頁介面
 
-1. **存取儀表板**：瀏覽至 http://localhost:5888
+1. **存取儀表板**：瀏覽至 http://localhost:8080
 2. **登入**：使用 admin/password 取得完整存取權限
 3. **管理代理**：建立、編輯與監控代理配置
 4. **檢視指標**：監控系統健康狀態與效能
@@ -266,12 +266,12 @@ app:
 
 ```bash
 # 認證
-curl -X POST http://localhost:5888/api/auth/login \
+curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"password"}'
 
 # 建立代理對應
-curl -X POST http://localhost:5888/api/proxy \
+curl -X POST http://localhost:8080/api/proxy \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -285,7 +285,7 @@ curl -X POST http://localhost:5888/api/proxy \
 
 # 列出所有代理
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:5888/api/proxy
+  http://localhost:8080/api/proxy
 ```
 
 ### gRPC 客戶端配置
@@ -314,7 +314,7 @@ git clone https://github.com/alvinchiu/gstream-gate.git
 cd gstream-gate
 
 # 後端開發
-./gradlew bootRun  # 啟動於埠號 5888
+./gradlew bootRun  # 啟動於埠號 8080
 
 # 前端開發（另開終端）
 cd frontend
@@ -357,11 +357,11 @@ npm start  # 啟動於埠號 3000
 
 ```bash
 # 應用程式健康狀態
-curl http://localhost:5888/actuator/health
+curl http://localhost:8080/actuator/health
 
 # 詳細健康狀態（需認證）
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:5888/actuator/health
+  http://localhost:8080/actuator/health
 ```
 
 ### 指標收集
@@ -370,7 +370,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 ```bash
 # Prometheus 指標端點
-curl http://localhost:5888/actuator/prometheus
+curl http://localhost:8080/actuator/prometheus
 ```
 
 主要指標包括：
@@ -524,7 +524,7 @@ app:
 
 ```bash
 # 檢查代理是否執行
-curl http://localhost:5888/actuator/health
+curl http://localhost:8080/actuator/health
 
 # 驗證 gRPC 埠號
 netstat -tlnp | grep 9092
@@ -534,7 +534,7 @@ netstat -tlnp | grep 9092
 
 ```bash
 # 驗證 JWT 權杖
-curl -X POST http://localhost:5888/api/auth/validate \
+curl -X POST http://localhost:8080/api/auth/validate \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -542,7 +542,7 @@ curl -X POST http://localhost:5888/api/auth/validate \
 
 ```bash
 # 檢查記憶體指標
-curl http://localhost:5888/actuator/metrics/jvm.memory.used
+curl http://localhost:8080/actuator/metrics/jvm.memory.used
 
 # 啟用記憶體最佳化
 export JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"

@@ -116,7 +116,7 @@ graph TB
 
 - Docker 20.10+ and Docker Compose 2.0+
 - 2GB+ available memory
-- Ports 5888, 9092 available
+- Ports 8080, 9092 available
 
 ### Docker Quick Start (Recommended)
 
@@ -127,15 +127,15 @@ cd gstream-gate
 
 # Build and run with Docker
 docker build -t gstreamgate:latest .
-docker run -d --name gstream-gate -p 5888:5888 -p 9092:9092 gstreamgate:latest
+docker run -d --name gstream-gate -p 8080:8080 -p 9092:9092 gstreamgate:latest
 ```
 
 **Access Points:**
 
-- Web Interface: http://localhost:5888
+- Web Interface: http://localhost:8080
 - gRPC Proxy: localhost:9092
-- Health Check: http://localhost:5888/actuator/health
-- Metrics: http://localhost:5888/actuator/prometheus
+- Health Check: http://localhost:8080/actuator/health
+- Metrics: http://localhost:8080/actuator/prometheus
 
 **Default Credentials:**
 
@@ -162,7 +162,7 @@ npm start
 # Production deployment with external database
 docker run -d \
   --name gstream-gate \
-  -p 5888:5888 \
+  -p 8080:8080 \
   -p 9092:9092 \
   -e SPRING_PROFILES_ACTIVE=production \
   -e DB_USERNAME=gstreamgate \
@@ -180,7 +180,7 @@ docker run -d \
 # Run the JAR file
 java -jar build/libs/gstream-gate-proxy-*.jar \
   --spring.profiles.active=production \
-  --server.port=5888 \
+  --server.port=8080 \
   --grpc.proxy.server.port=9092
 ```
 
@@ -196,7 +196,7 @@ SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/gstreamgate
 
 # Application Settings
 SPRING_PROFILES_ACTIVE=production
-SERVER_PORT=5888
+SERVER_PORT=8080
 GRPC_PROXY_SERVER_PORT=9092
 
 # Security
@@ -257,7 +257,7 @@ app:
 
 ### Web Interface
 
-1. **Access Dashboard**: Navigate to http://localhost:5888
+1. **Access Dashboard**: Navigate to http://localhost:8080
 2. **Login**: Use admin/password for full access
 3. **Manage Proxies**: Create, edit, and monitor proxy configurations
 4. **View Metrics**: Monitor system health and performance
@@ -266,12 +266,12 @@ app:
 
 ```bash
 # Authenticate
-curl -X POST http://localhost:5888/api/auth/login \
+curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"password"}'
 
 # Create proxy mapping
-curl -X POST http://localhost:5888/api/proxy \
+curl -X POST http://localhost:8080/api/proxy \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -285,7 +285,7 @@ curl -X POST http://localhost:5888/api/proxy \
 
 # List all proxies
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:5888/api/proxy
+  http://localhost:8080/api/proxy
 ```
 
 ### gRPC Client Configuration
@@ -314,7 +314,7 @@ git clone https://github.com/alvinchiu/gstream-gate.git
 cd gstream-gate
 
 # Backend development
-./gradlew bootRun  # Starts on port 5888
+./gradlew bootRun  # Starts on port 8080
 
 # Frontend development (separate terminal)
 cd frontend
@@ -357,11 +357,11 @@ npm start  # Starts on port 3000
 
 ```bash
 # Application health
-curl http://localhost:5888/actuator/health
+curl http://localhost:8080/actuator/health
 
 # Detailed health with authentication
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:5888/actuator/health
+  http://localhost:8080/actuator/health
 ```
 
 ### Metrics Collection
@@ -370,7 +370,7 @@ The application exports metrics in Prometheus format:
 
 ```bash
 # Prometheus metrics endpoint
-curl http://localhost:5888/actuator/prometheus
+curl http://localhost:8080/actuator/prometheus
 ```
 
 Key metrics include:
@@ -524,7 +524,7 @@ app:
 
 ```bash
 # Check if proxy is running
-curl http://localhost:5888/actuator/health
+curl http://localhost:8080/actuator/health
 
 # Verify gRPC port
 netstat -tlnp | grep 9092
@@ -534,7 +534,7 @@ netstat -tlnp | grep 9092
 
 ```bash
 # Verify JWT token
-curl -X POST http://localhost:5888/api/auth/validate \
+curl -X POST http://localhost:8080/api/auth/validate \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -542,7 +542,7 @@ curl -X POST http://localhost:5888/api/auth/validate \
 
 ```bash
 # Check memory metrics
-curl http://localhost:5888/actuator/metrics/jvm.memory.used
+curl http://localhost:8080/actuator/metrics/jvm.memory.used
 
 # Enable memory optimization
 export JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
