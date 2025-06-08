@@ -46,8 +46,9 @@ gStreamGate is a sophisticated, enterprise-ready gRPC proxy gateway that provide
 - 🔄 **Smart Flow Control** - Intelligent message flow optimization for streaming RPCs
 - ⚡ **Circuit Breaker Pattern** - Protection against cascading failures
 - 🔐 **JWT Authentication** - Secure REST API with role-based access control
+- 👥 **User Management System** - Complete CRUD operations with role-based permissions
 - 🎯 **Real-time Monitoring** - Comprehensive metrics with Prometheus integration
-- 🌐 **Modern Web Interface** - React-based management dashboard
+- 🌐 **Modern Web Interface** - React-based management dashboard with user management
 - 🐳 **Docker Ready** - Complete containerization with multi-stage builds
 - 📊 **Performance Optimization** - Memory pools, connection pooling, and resource management
 
@@ -260,7 +261,8 @@ app:
 1. **Access Dashboard**: Navigate to http://localhost:8080
 2. **Login**: Use admin/password for full access
 3. **Manage Proxies**: Create, edit, and monitor proxy configurations
-4. **View Metrics**: Monitor system health and performance
+4. **User Management**: Admin users can manage user accounts, roles, and permissions
+5. **View Metrics**: Monitor system health and performance
 
 ### REST API Examples
 
@@ -286,6 +288,26 @@ curl -X POST http://localhost:8080/api/proxy \
 # List all proxies
 curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/proxy
+
+# Create new user (Admin only)
+curl -X POST http://localhost:8080/api/admin/users \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "newuser",
+    "password": "SecurePass123!",
+    "email": "user@example.com",
+    "role": "USER",
+    "enabled": true
+  }'
+
+# List all users with pagination
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/admin/users?page=0&size=10"
+
+# Search users by keyword
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/admin/users/search?keyword=john&page=0&size=10"
 ```
 
 ### gRPC Client Configuration
@@ -419,6 +441,20 @@ docker logs -f gstream-gate
 | DELETE | `/api/proxy/{id}`        | Delete proxy         | ADMIN         |
 | PATCH  | `/api/proxy/{id}/status` | Toggle proxy status  | ADMIN         |
 | POST   | `/api/proxy/refresh`     | Refresh all proxies  | ADMIN         |
+
+### User Management Endpoints
+
+| Method | Endpoint                    | Description              | Auth Required |
+| ------ | --------------------------- | ------------------------ | ------------- |
+| GET    | `/api/admin/users`          | List all users           | ADMIN         |
+| GET    | `/api/admin/users/{id}`     | Get user by ID           | ADMIN         |
+| POST   | `/api/admin/users`          | Create new user          | ADMIN         |
+| PUT    | `/api/admin/users/{id}`     | Update user              | ADMIN         |
+| DELETE | `/api/admin/users/{id}`     | Delete user              | ADMIN         |
+| PUT    | `/api/admin/users/{id}/enable`  | Enable user account  | ADMIN         |
+| PUT    | `/api/admin/users/{id}/disable` | Disable user account | ADMIN         |
+| PUT    | `/api/admin/users/{id}/role`    | Update user role     | ADMIN         |
+| GET    | `/api/admin/users/search`   | Search users by keyword  | ADMIN         |
 
 ### Response Format
 

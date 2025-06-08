@@ -155,6 +155,94 @@ const ProxyService = {
 };
 
 // ===========================================
+// 3. 使用者管理服務 - API 呼叫模組
+// ===========================================
+const UserManagementService = {
+  baseUrl: '/api/admin/users',
+
+  async getAllUsers(token: string, page: number = 0, size: number = 10) {
+    const response = await fetch(`${this.baseUrl}?page=${page}&size=${size}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async getUserById(token: string, id: number) {
+    const response = await fetch(`${this.baseUrl}/${id}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async createUser(token: string, userData: any) {
+    const response = await fetch(this.baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(userData)
+    });
+    return response.json();
+  },
+
+  async updateUser(token: string, id: number, userData: any) {
+    const response = await fetch(`${this.baseUrl}/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(userData)
+    });
+    return response.json();
+  },
+
+  async deleteUser(token: string, id: number) {
+    const response = await fetch(`${this.baseUrl}/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async enableUser(token: string, id: number) {
+    const response = await fetch(`${this.baseUrl}/${id}/enable`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async disableUser(token: string, id: number) {
+    const response = await fetch(`${this.baseUrl}/${id}/disable`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async updateUserRole(token: string, id: number, role: string) {
+    const response = await fetch(`${this.baseUrl}/${id}/role`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ role })
+    });
+    return response.json();
+  },
+
+  async searchUsers(token: string, keyword: string, page: number = 0, size: number = 10) {
+    const response = await fetch(`${this.baseUrl}/search?keyword=${encodeURIComponent(keyword)}&page=${page}&size=${size}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  }
+};
+
+// ===========================================
 // 3. 驗證內容 - 狀態管理
 // ===========================================
 interface AuthContextType {
@@ -326,8 +414,7 @@ const LoginForm: React.FC = () => {
             </button>
 
             <div className="text-center text-sm text-gray-500">
-              <p>預設帳戶: admin / password</p>
-              <p>一般使用者: user / password</p>
+              <p>請使用您的帳戶登入</p>
             </div>
           </form>
         </div>
@@ -1188,23 +1275,638 @@ const SystemSettings: React.FC = () => {
 };
 
 // ===========================================
-// 10. 使用者管理組件 (占位符)
+// 10. 使用者管理組件
 // ===========================================
 const UserManagement: React.FC = () => {
-  return (
+  const { token, user } = useAuth();
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const pageSize = 10;
+
+  const isAdmin = user?.username === 'admin' || user?.role === 'ADMIN';
+
+  useEffect(() => {
+    if (token && isAdmin) {
+      fetchUsers();
+    }
+  }, [token, isAdmin, currentPage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const response = searchTerm 
+        ? await UserManagementService.searchUsers(token!, searchTerm, currentPage, pageSize)
+        : await UserManagementService.getAllUsers(token!, currentPage, pageSize);
+      
+      setUsers(response.users || []);
+      setTotalPages(response.totalPages || 0);
+      setTotalElements(response.totalElements || 0);
+    } catch (error) {
+      console.error('載入使用者列表錯誤:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = async () => {
+    setCurrentPage(0);
+    fetchUsers();
+  };
+
+  const handleStatusToggle = async (userId: number, currentEnabled: boolean) => {
+    try {
+      if (currentEnabled) {
+        await UserManagementService.disableUser(token!, userId);
+      } else {
+        await UserManagementService.enableUser(token!, userId);
+      }
+      fetchUsers();
+    } catch (error: any) {
+      alert(error.message || '切換狀態失敗');
+    }
+  };
+
+  const handleRoleChange = async (userId: number, newRole: string) => {
+    try {
+      await UserManagementService.updateUserRole(token!, userId, newRole);
+      fetchUsers();
+    } catch (error: any) {
+      alert(error.message || '更新角色失敗');
+    }
+  };
+
+  const handleDelete = async (userId: number, username: string) => {
+    if (window.confirm(`確定要刪除使用者 "${username}" 嗎？`)) {
+      try {
+        await UserManagementService.deleteUser(token!, userId);
+        fetchUsers();
+      } catch (error: any) {
+        alert(error.message || '刪除使用者失敗');
+      }
+    }
+  };
+
+  if (!isAdmin) {
+    return (
       <div className="p-6 space-y-6">
         <h1 className="text-2xl font-bold text-gray-900">使用者管理</h1>
-
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <div className="text-center py-12">
             <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">使用者管理功能</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">權限不足</h3>
             <p className="text-gray-500">
-              此功能正在開發中，將在後續版本中提供完整的使用者管理功能
+              您需要管理員權限才能訪問使用者管理功能
             </p>
           </div>
         </div>
       </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="flex justify-center items-center h-64">
+          <RefreshCw className="h-8 w-8 animate-spin text-blue-500" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-gray-900">使用者管理</h1>
+        <div className="flex space-x-3">
+          <button
+            onClick={fetchUsers}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            <span>重新整理</span>
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+          >
+            <Plus className="h-4 w-4" />
+            <span>新增使用者</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 搜尋區域 */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex space-x-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <input
+                type="text"
+                placeholder="搜尋使用者名稱或電子郵件..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <button
+              onClick={handleSearch}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              搜尋
+            </button>
+            {searchTerm && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setCurrentPage(0);
+                  fetchUsers();
+                }}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                清除
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 使用者列表 */}
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  使用者資訊
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  角色
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  狀態
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  建立時間
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  最後登入
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  操作
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {users.map((userData) => (
+                <tr key={userData.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {userData.username}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {userData.email}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <select
+                      value={userData.role}
+                      onChange={(e) => handleRoleChange(userData.id, e.target.value)}
+                      className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="USER">使用者</option>
+                      <option value="ADMIN">管理員</option>
+                    </select>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      {userData.enabled ? (
+                        <div className="flex items-center space-x-2">
+                          <div className="h-2 w-2 bg-green-400 rounded-full"></div>
+                          <span className="text-sm text-green-700">啟用</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center space-x-2">
+                          <div className="h-2 w-2 bg-red-400 rounded-full"></div>
+                          <span className="text-sm text-red-700">停用</span>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {userData.createdDate ? new Date(userData.createdDate).toLocaleDateString('zh-TW') : '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {userData.lastLogin ? new Date(userData.lastLogin).toLocaleDateString('zh-TW') : '未登入'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleStatusToggle(userData.id, userData.enabled)}
+                        className={`p-1 rounded-lg transition-colors ${
+                          userData.enabled
+                            ? 'text-red-600 hover:bg-red-50'
+                            : 'text-green-600 hover:bg-green-50'
+                        }`}
+                        title={userData.enabled ? '停用' : '啟用'}
+                      >
+                        {userData.enabled ? 
+                          <PowerOff className="h-4 w-4" /> : 
+                          <Power className="h-4 w-4" />
+                        }
+                      </button>
+                      <button
+                        onClick={() => setEditingUser(userData)}
+                        className="p-1 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="編輯"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(userData.id, userData.username)}
+                        className="p-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="刪除"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {users.length === 0 && (
+            <div className="text-center py-12">
+              <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">沒有找到使用者</h3>
+              <p className="text-gray-500">
+                {searchTerm ? '請嘗試調整搜尋條件' : '還沒有使用者資料'}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* 分頁 */}
+        {totalPages > 1 && (
+          <div className="px-6 py-3 border-t border-gray-200 flex items-center justify-between">
+            <div className="text-sm text-gray-500">
+              顯示 {currentPage * pageSize + 1} 到 {Math.min((currentPage + 1) * pageSize, totalElements)} 筆，共 {totalElements} 筆
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+                disabled={currentPage === 0}
+                className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                上一頁
+              </button>
+              <span className="px-3 py-1 text-sm">
+                第 {currentPage + 1} 頁，共 {totalPages} 頁
+              </span>
+              <button
+                onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
+                disabled={currentPage >= totalPages - 1}
+                className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                下一頁
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 新增/編輯模態框 */}
+      {(showCreateModal || editingUser) && (
+        <UserModal
+          user={editingUser}
+          onClose={() => {
+            setShowCreateModal(false);
+            setEditingUser(null);
+          }}
+          onSave={() => {
+            fetchUsers();
+            setShowCreateModal(false);
+            setEditingUser(null);
+          }}
+          token={token!}
+        />
+      )}
+    </div>
+  );
+};
+
+// ===========================================
+// 11. 使用者模態框組件
+// ===========================================
+interface UserModalProps {
+  user: any;
+  onClose: () => void;
+  onSave: () => void;
+  token: string;
+}
+
+const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave, token }) => {
+  const [formData, setFormData] = useState({
+    username: '',
+    password: '',
+    email: '',
+    role: 'USER',
+    enabled: true
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [changePassword, setChangePassword] = useState(false);
+  const [copyMessage, setCopyMessage] = useState('');
+
+  const isEditing = !!user;
+
+  // 產生安全密碼函數
+  const generateSecurePassword = () => {
+    const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+    const numbers = '0123456789';
+    const symbols = '!@#$%^&*()_+-=[]{}|;:,.<>?';
+    const allChars = uppercase + lowercase + numbers + symbols;
+    
+    let password = '';
+    
+    // 確保至少包含每種字符類型
+    password += uppercase[Math.floor(Math.random() * uppercase.length)];
+    password += lowercase[Math.floor(Math.random() * lowercase.length)];
+    password += numbers[Math.floor(Math.random() * numbers.length)];
+    password += symbols[Math.floor(Math.random() * symbols.length)];
+    
+    // 填充到14位數
+    for (let i = 4; i < 14; i++) {
+      password += allChars[Math.floor(Math.random() * allChars.length)];
+    }
+    
+    // 打亂順序
+    return password.split('').sort(() => Math.random() - 0.5).join('');
+  };
+
+  // 複製到剪貼簿並顯示提示
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyMessage('密碼已複製到剪貼簿！');
+      setTimeout(() => setCopyMessage(''), 3000);
+    } catch (err) {
+      // 如果 clipboard API 不可用，使用傳統方法
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopyMessage('密碼已複製到剪貼簿！');
+      setTimeout(() => setCopyMessage(''), 3000);
+    }
+  };
+
+  // 一鍵產生並複製密碼
+  const handleGeneratePassword = () => {
+    const newPassword = generateSecurePassword();
+    setFormData({...formData, password: newPassword});
+    copyToClipboard(newPassword);
+  };
+
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        username: user.username || '',
+        password: '', // 編輯時不顯示密碼
+        email: user.email || '',
+        role: user.role || 'USER',
+        enabled: user.enabled !== false
+      });
+    }
+  }, [user]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (isEditing) {
+        const updateData: any = {
+          username: formData.username,
+          email: formData.email,
+          role: formData.role,
+          enabled: formData.enabled
+        };
+        // 加入密碼更新邏輯
+        if (changePassword && formData.password) {
+          updateData.password = formData.password;
+        }
+        await UserManagementService.updateUser(token, user.id, updateData);
+      } else {
+        await UserManagementService.createUser(token, formData);
+      }
+      onSave();
+    } catch (error: any) {
+      setError(error.message || '儲存失敗');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl max-w-md w-full">
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-xl font-bold text-gray-900">
+            {isEditing ? '編輯使用者' : '新增使用者'}
+          </h2>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              使用者名稱 *
+            </label>
+            <input
+              type="text"
+              value={formData.username}
+              onChange={(e) => setFormData({...formData, username: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            />
+          </div>
+
+          {/* 密碼區塊 */}
+          {!isEditing ? (
+            // 新增使用者時的密碼欄位
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                密碼 *
+              </label>
+              <div className="space-y-3">
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={(e) => setFormData({...formData, password: e.target.value})}
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="請輸入密碼"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={handleGeneratePassword}
+                    className="flex-1 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    <span>一鍵產生安全密碼</span>
+                  </button>
+                </div>
+                {copyMessage && (
+                  <div className="text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+                    {copyMessage}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            // 編輯使用者時的密碼變更區塊
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-sm font-medium text-gray-700">
+                  密碼
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setChangePassword(!changePassword)}
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                >
+                  {changePassword ? '取消修改密碼' : '修改密碼'}
+                </button>
+              </div>
+              
+              {changePassword && (
+                <div className="space-y-3">
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={formData.password}
+                      onChange={(e) => setFormData({...formData, password: e.target.value})}
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="輸入新密碼"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                    >
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button
+                      type="button"
+                      onClick={handleGeneratePassword}
+                      className="flex-1 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      <span>一鍵產生安全密碼</span>
+                    </button>
+                  </div>
+                  {copyMessage && (
+                    <div className="text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+                      {copyMessage}
+                    </div>
+                  )}
+                  <div className="text-xs text-gray-500">
+                    密碼將包含大小寫字母、數字和特殊符號，長度14位數
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              電子郵件 *
+            </label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({...formData, email: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              角色
+            </label>
+            <select
+              value={formData.role}
+              onChange={(e) => setFormData({...formData, role: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="USER">使用者</option>
+              <option value="ADMIN">管理員</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="flex items-center space-x-3">
+              <input
+                type="checkbox"
+                checked={formData.enabled}
+                onChange={(e) => setFormData({...formData, enabled: e.target.checked})}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <span className="text-sm text-gray-700">啟用帳戶</span>
+            </label>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? '儲存中...' : (isEditing ? '更新' : '建立')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 };
 

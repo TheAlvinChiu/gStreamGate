@@ -263,40 +263,234 @@ clean_resources() {
     log_success "資源清理完成"
 }
 
+# 快速啟動（僅啟動應用程式）
+quick_start() {
+    log_title "快速啟動 gStreamGate"
+    
+    # 檢查 JAR 檔案
+    local jar_file="build/libs/gStreamGate-0.0.1-SNAPSHOT.jar"
+    if [ ! -f "$jar_file" ]; then
+        log_info "JAR 檔案不存在，正在建置..."
+        if ! ./gradlew bootJar; then
+            log_error "建置失敗"
+            return 1
+        fi
+    fi
+    
+    # 停止舊進程
+    stop_java_app
+    
+    # 設定環境變數
+    export SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-development}
+    
+    # 檢查端口
+    if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
+        log_warning "端口 8080 已被佔用"
+        read -p "是否強制停止佔用進程？(y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            local pid=$(lsof -t -i :8080)
+            kill -9 $pid 2>/dev/null
+            sleep 2
+        else
+            log_error "端口佔用，無法啟動"
+            return 1
+        fi
+    fi
+    
+    # 建立日誌目錄
+    mkdir -p logs
+    
+    # 啟動應用程式
+    log_info "啟動應用程式..."
+    nohup java -jar "$jar_file" > logs/app.log 2>&1 &
+    local pid=$!
+    echo $pid > .app.pid
+    
+    log_info "應用程式啟動中，PID: $pid"
+    
+    # 等待啟動
+    log_info "等待服務啟動..."
+    local max_attempts=30
+    local attempt=0
+    
+    while [ $attempt -lt $max_attempts ]; do
+        if curl -s -f http://localhost:8080/actuator/health > /dev/null 2>&1; then
+            log_success "應用程式啟動成功！"
+            show_quick_info
+            return 0
+        fi
+        
+        echo -n "."
+        sleep 2
+        ((attempt++))
+    done
+    
+    log_error "應用程式啟動超時"
+    show_logs_hint
+    return 1
+}
+
+# 停止 Java 應用程式
+stop_java_app() {
+    if [ -f .app.pid ]; then
+        local pid=$(cat .app.pid)
+        if ps -p $pid > /dev/null 2>&1; then
+            log_info "停止應用程式 (PID: $pid)..."
+            kill $pid
+            sleep 3
+            if ps -p $pid > /dev/null 2>&1; then
+                log_warning "強制停止應用程式..."
+                kill -9 $pid
+            fi
+        fi
+        rm -f .app.pid
+    fi
+    
+    # 清理任何殘留的 Java 進程
+    local java_pids=$(ps aux | grep "gStreamGate.*jar" | grep -v grep | awk '{print $2}')
+    if [ -n "$java_pids" ]; then
+        log_info "清理殘留進程..."
+        echo $java_pids | xargs kill -9 2>/dev/null || true
+    fi
+}
+
+# 顯示快速啟動資訊
+show_quick_info() {
+    log_title "服務啟動完成"
+    
+    echo ""
+    echo "🌐 Web 管理介面: http://localhost:8080"
+    echo "📊 健康檢查: http://localhost:8080/actuator/health"
+    echo "🔗 gRPC 代理: localhost:9092"
+    echo ""
+    echo "🔐 預設登入資訊："
+    echo "   管理者: admin / admin123"
+    echo "   測試用戶: testuser / test123"
+    echo ""
+    echo "🛠 管理指令："
+    echo "   查看日誌: tail -f logs/app.log"
+    echo "   停止服務: $0 stop"
+    echo "   重啟服務: $0 restart"
+    echo ""
+}
+
+# 顯示日誌提示
+show_logs_hint() {
+    echo ""
+    echo "💡 檢查啟動日誌："
+    echo "   tail -f logs/app.log"
+    echo "   curl http://localhost:8080/actuator/health"
+    echo ""
+}
+
+# 檢查應用程式狀態
+check_app_status() {
+    if [ -f .app.pid ]; then
+        local pid=$(cat .app.pid)
+        if ps -p $pid > /dev/null 2>&1; then
+            echo "應用程式運行中 (PID: $pid)"
+            if curl -s -f http://localhost:8080/actuator/health > /dev/null 2>&1; then
+                echo "健康檢查: ✅ 正常"
+            else
+                echo "健康檢查: ❌ 異常"
+            fi
+        else
+            echo "應用程式未運行"
+            rm -f .app.pid
+        fi
+    else
+        echo "應用程式未運行"
+    fi
+}
+
 # 顯示使用說明
 show_usage() {
     echo "Usage: $0 [COMMAND] [OPTIONS]"
     echo ""
     echo "Commands:"
-    echo "  start [profile]   啟動服務 (預設)"
+    echo "  start [profile]   啟動服務"
+    echo "  quick             快速啟動 (僅應用程式，推薦)"
     echo "  stop              停止服務"
     echo "  restart [profile] 重啟服務"
     echo "  status            查看服務狀態"
     echo "  logs [service]    查看服務日誌"
+    echo "  build             建置應用程式"
     echo "  clean             清理所有資源"
     echo "  help              顯示此說明"
     echo ""
-    echo "Profiles:"
+    echo "Docker Profiles (僅限 start 命令):"
     echo "  (無)              基本服務 (app + prometheus + grafana)"
     echo "  redis             包含 Redis 快取"
     echo "  nginx             包含 Nginx 反向代理"
     echo "  full              包含所有組件"
     echo ""
     echo "Examples:"
-    echo "  $0 start          # 啟動基本服務"
-    echo "  $0 start redis    # 啟動服務並包含 Redis"
-    echo "  $0 start full     # 啟動所有服務"
-    echo "  $0 logs app       # 查看應用日誌"
+    echo "  $0 quick          # 快速啟動 (推薦)"
+    echo "  $0 start          # Docker 基本服務"
+    echo "  $0 build          # 僅建置"
     echo "  $0 stop           # 停止所有服務"
+    echo "  $0 logs           # 查看應用日誌"
     echo ""
+}
+
+# 建置應用程式
+build_app() {
+    log_title "建置 gStreamGate 應用程式"
+    
+    log_info "檢查 Gradle 環境..."
+    if ! ./gradlew --version > /dev/null 2>&1; then
+        log_error "Gradle 執行失敗"
+        return 1
+    fi
+    
+    log_info "清理舊的建置..."
+    ./gradlew clean
+    
+    log_info "建置應用程式..."
+    if ./gradlew bootJar; then
+        log_success "建置完成！"
+        ls -la build/libs/
+    else
+        log_error "建置失敗"
+        return 1
+    fi
+}
+
+# 查看日誌
+show_logs() {
+    local service="${1:-app}"
+    
+    case "$service" in
+        "app"|"application")
+            if [ -f logs/app.log ]; then
+                log_info "查看應用程式日誌 (Ctrl+C 停止)..."
+                tail -f logs/app.log
+            else
+                log_warning "日誌檔案不存在，應用程式可能未啟動"
+                log_info "嘗試快速啟動: $0 quick"
+            fi
+            ;;
+        *)
+            # Docker 服務日誌
+            if command -v docker-compose &> /dev/null; then
+                docker-compose logs -f "$service"
+            else
+                log_error "Docker Compose 不可用"
+            fi
+            ;;
+    esac
 }
 
 # 主函數
 main() {
-    local command="${1:-start}"
+    local command="${1:-quick}"
     local profile="${2:-}"
     
     case "$command" in
+        "quick")
+            quick_start
+            ;;
         "start")
             check_dependencies
             check_ports
@@ -312,25 +506,46 @@ main() {
             fi
             ;;
         "stop")
-            stop_services
+            stop_java_app
+            if command -v docker-compose &> /dev/null; then
+                stop_services
+            fi
+            log_success "所有服務已停止"
             ;;
         "restart")
-            stop_services
-            sleep 2
-            main start "$profile"
-            ;;
-        "status")
-            show_status
-            ;;
-        "logs")
-            if [ -n "$profile" ]; then
-                docker-compose logs -f "$profile"
+            if [ "$profile" = "quick" ] || [ -z "$profile" ]; then
+                stop_java_app
+                sleep 2
+                quick_start
             else
-                docker-compose logs -f
+                stop_services
+                sleep 2
+                main start "$profile"
             fi
             ;;
+        "status")
+            check_app_status
+            echo ""
+            if command -v docker-compose &> /dev/null; then
+                show_status
+            fi
+            ;;
+        "logs")
+            show_logs "$profile"
+            ;;
+        "build")
+            build_app
+            ;;
         "clean")
-            clean_resources
+            stop_java_app
+            rm -f .app.pid
+            if command -v docker-compose &> /dev/null; then
+                clean_resources
+            fi
+            log_info "清理建置檔案..."
+            ./gradlew clean
+            rm -rf logs/*
+            log_success "清理完成"
             ;;
         "help"|"-h"|"--help")
             show_usage
