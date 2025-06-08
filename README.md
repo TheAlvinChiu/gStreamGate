@@ -628,8 +628,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### Credits
 
-- **Author**: Alvin Chiu ([@thealvin](https://github.com/thealvin))
-- **Contributors**: See [CONTRIBUTORS.md](CONTRIBUTORS.md)
+- **Author**: Alvin Chiu ([@TheAlvinChiu](https://github.com/TheAlvinChiu))
 - **Powered by**: Spring Boot, React, gRPC, and the amazing open-source community
 
 ### Acknowledgments

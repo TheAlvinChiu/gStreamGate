@@ -628,8 +628,7 @@ logging:
 
 ### 致謝
 
-- **作者**：Alvin Chiu ([@thealvin](https://github.com/thealvin))
-- **貢獻者**：參見 [CONTRIBUTORS.md](CONTRIBUTORS.md)
+- **作者**：Alvin Chiu ([@TheAlvinChiu](https://github.com/TheAlvinChiu))
 - **技術支援**：Spring Boot、React、gRPC 與優秀的開源社群
 
 ### 感謝

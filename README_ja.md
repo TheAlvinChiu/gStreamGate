@@ -628,8 +628,7 @@ logging:
 
 ### 謝辞
 
-- **作者**：Alvin Chiu ([@thealvin](https://github.com/thealvin))
-- **コントリビューター**：[CONTRIBUTORS.md](CONTRIBUTORS.md) を参照
+- **作者**：Alvin Chiu ([@TheAlvinChiu](https://github.com/TheAlvinChiu))
 - **技術提供**：Spring Boot、React、gRPC、素晴らしいオープンソースコミュニティ
 
 ### 感謝
