@@ -10,7 +10,7 @@
 
 [Quick Start](#quick-start) • [Documentation](#usage) • [API Reference](#api-reference) • [Contributing](#contributing)
 
-**Language:** English | [繁體中文](README_zh-TW.md)
+**Language:** English | [繁體中文](README_zh-TW.md) | [日本語](README_ja.md)
 
 </div>
 
