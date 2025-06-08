@@ -46,8 +46,9 @@ gStreamGate 是一個精密且適合企業使用的 gRPC 代理閘道，提供�
 - 🔄 **智慧流量控制** - 針對串流 RPC 進行智慧訊息流最佳化
 - ⚡ **熔斷器模式** - 防範級聯故障的保護機制
 - 🔐 **JWT 認證** - 具角色權限控制的安全 REST API
+- 👥 **使用者管理系統** - 完整的 CRUD 操作與角色權限管理
 - 🎯 **即時監控** - 整合 Prometheus 的全面性指標監控
-- 🌐 **現代化網頁介面** - 基於 React 的管理儀表板
+- 🌐 **現代化網頁介面** - 基於 React 的管理儀表板與使用者管理
 - 🐳 **Docker 就緒** - 完整容器化與多階段建置
 - 📊 **效能最佳化** - 記憶體池、連線池與資源管理
 
@@ -260,7 +261,8 @@ app:
 1. **存取儀表板**：瀏覽至 http://localhost:8080
 2. **登入**：使用 admin/password 取得完整存取權限
 3. **管理代理**：建立、編輯與監控代理配置
-4. **檢視指標**：監控系統健康狀態與效能
+4. **使用者管理**：管理員可管理使用者帳戶、角色與權限
+5. **檢視指標**：監控系統健康狀態與效能
 
 ### REST API 範例
 
@@ -286,6 +288,26 @@ curl -X POST http://localhost:8080/api/proxy \
 # 列出所有代理
 curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/proxy
+
+# 建立新使用者（僅管理員）
+curl -X POST http://localhost:8080/api/admin/users \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "newuser",
+    "password": "SecurePass123!",
+    "email": "user@example.com",
+    "role": "USER",
+    "enabled": true
+  }'
+
+# 列出所有使用者（含分頁）
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/admin/users?page=0&size=10"
+
+# 依關鍵字搜尋使用者
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/admin/users/search?keyword=john&page=0&size=10"
 ```
 
 ### gRPC 客戶端配置
@@ -419,6 +441,20 @@ docker logs -f gstream-gate
 | DELETE | `/api/proxy/{id}` | 刪除代理 | ADMIN |
 | PATCH | `/api/proxy/{id}/status` | 切換代理狀態 | ADMIN |
 | POST | `/api/proxy/refresh` | 重新整理所有代理 | ADMIN |
+
+### 使用者管理端點
+
+| 方法 | 端點 | 說明 | 權限需求 |
+|------|------|------|----------|
+| GET | `/api/admin/users` | 列出所有使用者 | ADMIN |
+| GET | `/api/admin/users/{id}` | 依 ID 取得使用者 | ADMIN |
+| POST | `/api/admin/users` | 建立新使用者 | ADMIN |
+| PUT | `/api/admin/users/{id}` | 更新使用者 | ADMIN |
+| DELETE | `/api/admin/users/{id}` | 刪除使用者 | ADMIN |
+| PUT | `/api/admin/users/{id}/enable` | 啟用使用者帳戶 | ADMIN |
+| PUT | `/api/admin/users/{id}/disable` | 停用使用者帳戶 | ADMIN |
+| PUT | `/api/admin/users/{id}/role` | 更新使用者角色 | ADMIN |
+| GET | `/api/admin/users/search` | 依關鍵字搜尋使用者 | ADMIN |
 
 ### 回應格式
 
