@@ -20,8 +20,8 @@ public class ExecutorManager {
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
     public ExecutorManager() {
-        // Create executor with a custom thread factory
-        this.healthCheckExecutor = Executors.newScheduledThreadPool(2, new ThreadFactory() {
+        // Create executor with optimized thread pool size
+        this.healthCheckExecutor = Executors.newScheduledThreadPool(4, new ThreadFactory() {
             private int threadNumber = 1;
 
             @Override

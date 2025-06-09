@@ -70,6 +70,14 @@ grpc:
   proxy:
     server:
       port: 9092
+      maxInboundMessageSize: 33554432  # 32MB
+      maxInboundMetadataSize: 32768    # 32KB
+      flowControlWindow: 4194304       # 4MB
+      keepAliveTimeSeconds: 120
+      keepAliveTimeoutSeconds: 30
+      permitKeepAliveTime: 60
+      maxConnectionAge: 600
+      maxConnectionIdle: 300
     timeout:
       connectTimeoutSeconds: 10
       sendTimeoutSeconds: 5
@@ -77,6 +85,11 @@ grpc:
     tls:
       enabled: false
       autoTrustUpstreamCertificates: false
+    performance:
+      enableCompression: true
+      compressionLevel: 6
+      maxConcurrentCalls: 1000
+      enableFlowControl: true
 
 # ==========================================
 # 服務器配置 - Undertow 優化
@@ -91,13 +104,15 @@ server:
     enabled: true
   # Undertow 特定配置
   undertow:
-    # 線程配置
+    # 線程配置 (優化後)
     threads:
-      io: 8                    # IO 線程數，通常設為 CPU 核心數
-      worker: 64               # 工作線程數
-    # 緩衝區配置
-    buffer-size: 16384         # 16KB 緩衝區大小
+      io: 16                   # IO 線程數，增加以支援更多連接
+      worker: 128              # 工作線程數，增加以處理更多併發
+    # 緩衝區配置 (優化後)
+    buffer-size: 32768         # 32KB 緩衝區大小，增加處理能力
     direct-buffers: true       # 使用直接緩衝區（堆外內存）
+    buffers-per-region: 1024   # 每個區域的緩衝區數量
+    max-buffer-pool-size: 2048 # 最大緩衝區池大小
     # 連接配置
     max-http-post-size: 20MB   # 最大 HTTP POST 大小
     max-parameters: 1000       # 最大參數數量
@@ -205,9 +220,11 @@ logging:
 app:
   # 連接池配置
   connectionPool:
-    minConnectionsPerTarget: 2
-    maxConnectionsPerTarget: 8
+    minConnectionsPerTarget: 4
+    maxConnectionsPerTarget: 16
     connectionWarmupTimeoutSeconds: 30
+    connectionIdleTimeoutSeconds: 300
+    healthCheckIntervalSeconds: 60
 
   # 熔斷器配置
   circuitBreaker:
@@ -221,9 +238,12 @@ app:
   memory:
     enableObjectPools: true
     enableResponseCache: true
-    cacheMaxSize: 1000
-    cacheExpireMinutes: 5
+    cacheMaxSize: 5000
+    cacheExpireMinutes: 10
     memoryMonitorIntervalSeconds: 30
+    enableZeroCopy: true
+    bufferPoolSize: 1024
+    maxBufferSize: 65536
 
   # Metrics 配置
   metrics:

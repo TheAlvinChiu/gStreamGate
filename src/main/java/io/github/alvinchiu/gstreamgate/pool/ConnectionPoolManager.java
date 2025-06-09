@@ -23,10 +23,12 @@ import java.util.concurrent.locks.ReentrantLock;
 public class ConnectionPoolManager {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionPoolManager.class);
 
-    // Connection pool configuration
-    private static final int MIN_CONNECTIONS_PER_TARGET = 2;
-    private static final int MAX_CONNECTIONS_PER_TARGET = 8;
+    // Connection pool configuration - Performance optimized
+    private static final int MIN_CONNECTIONS_PER_TARGET = 4;
+    private static final int MAX_CONNECTIONS_PER_TARGET = 16;
     private static final int CONNECTION_WARMUP_TIMEOUT_SECONDS = 30;
+    private static final int CONNECTION_IDLE_TIMEOUT_SECONDS = 300;
+    private static final long HEALTH_CHECK_INTERVAL_MS = 60000;
 
     // Connection pools for each target
     private final Map<String, ChannelPool> channelPools = new ConcurrentHashMap<>();
