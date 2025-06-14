@@ -1628,14 +1628,17 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave, token }) =
   const [copyMessage, setCopyMessage] = useState('');
 
   const isEditing = !!user;
+  
+  // 調試資訊
+  console.log('UserModal - user:', user);
+  console.log('UserModal - isEditing:', isEditing);
 
-  // 產生安全密碼函數
+  // 產生安全密碼函數 (12位數，英文大小寫與數字)
   const generateSecurePassword = () => {
     const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const lowercase = 'abcdefghijklmnopqrstuvwxyz';
     const numbers = '0123456789';
-    const symbols = '!@#$%^&*()_+-=[]{}|;:,.<>?';
-    const allChars = uppercase + lowercase + numbers + symbols;
+    const allChars = uppercase + lowercase + numbers;
     
     let password = '';
     
@@ -1643,10 +1646,9 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave, token }) =
     password += uppercase[Math.floor(Math.random() * uppercase.length)];
     password += lowercase[Math.floor(Math.random() * lowercase.length)];
     password += numbers[Math.floor(Math.random() * numbers.length)];
-    password += symbols[Math.floor(Math.random() * symbols.length)];
     
-    // 填充到14位數
-    for (let i = 4; i < 14; i++) {
+    // 填充到12位數
+    for (let i = 3; i < 12; i++) {
       password += allChars[Math.floor(Math.random() * allChars.length)];
     }
     
@@ -1842,7 +1844,7 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave, token }) =
                     </div>
                   )}
                   <div className="text-xs text-gray-500">
-                    密碼將包含大小寫字母、數字和特殊符號，長度14位數
+                    密碼將包含大小寫字母和數字，長度12位數
                   </div>
                 </div>
               )}
