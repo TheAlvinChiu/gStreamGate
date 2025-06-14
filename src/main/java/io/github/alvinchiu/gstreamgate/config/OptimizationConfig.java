@@ -95,13 +95,14 @@ public class OptimizationConfig {
             logger.info("Adaptive components not found, will use basic optimization only");
         }
 
-        // Inject into the optimized handlers
+        // Inject into the optimized handlers (tracing temporarily disabled)
         OptimizedProxyServerCallHandler.injectOptimizedComponents(
                 circuitBreakerManager,
                 proxyMetrics,
                 memoryOptimizer,
                 timeoutManager,
-                flowControlManager
+                flowControlManager,
+                null  // TracingUtils temporarily disabled
         );
 
         logger.info("Optimization components successfully injected");

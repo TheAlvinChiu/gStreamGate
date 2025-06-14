@@ -252,6 +252,36 @@ app:
     enableMemoryMetrics: true
     reportIntervalSeconds: 60
 
+# ==========================================
+# OpenTelemetry 追蹤配置
+# ==========================================
+opentelemetry:
+  service:
+    name: gstream-gate-proxy
+    version: 1.0.0
+  
+  # 追蹤配置
+  traces:
+    enabled: true
+  
+  # 採樣配置
+  sampler:
+    probability: 1.0  # 開發環境 100% 採樣
+  
+  # 導出器配置
+  exporter:
+    type: logging  # 預設使用日誌導出器
+    jaeger:
+      endpoint: http://localhost:14250
+    otlp:
+      endpoint: http://localhost:4317
+  
+  # 資源屬性
+  resource:
+    attributes:
+      service.namespace: gstream-gate
+      deployment.environment: development
+
 ---
 # ==========================================
 # 開發環境配置
@@ -358,9 +388,39 @@ management:
 # 生產環境優化配置
 app:
   connectionPool:
-    maxConnectionsPerTarget: 16
+    minConnectionsPerTarget: 8
+    maxConnectionsPerTarget: 32
+    connectionIdleTimeoutSeconds: 600
+    healthCheckIntervalSeconds: 120
   circuitBreaker:
     waitDurationSeconds: 120
   memory:
-    cacheMaxSize: 5000
+    cacheMaxSize: 10000
     memoryMonitorIntervalSeconds: 60
+    enableZeroCopy: true
+    bufferPoolSize: 2048
+    maxBufferSize: 131072
+
+# 生產環境 OpenTelemetry 配置
+opentelemetry:
+  service:
+    name: gstream-gate-proxy
+    version: 1.0.0
+  
+  traces:
+    enabled: true
+  
+  sampler:
+    probability: 0.1  # 生產環境 10% 採樣
+  
+  exporter:
+    type: jaeger  # 生產環境使用 Jaeger
+    jaeger:
+      endpoint: ${JAEGER_ENDPOINT:http://jaeger:14250}
+    otlp:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://otel-collector:4317}
+  
+  resource:
+    attributes:
+      service.namespace: gstream-gate
+      deployment.environment: production

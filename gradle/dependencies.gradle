@@ -15,6 +15,8 @@ ext {
     postgresqlVersion = '42.7.4'
     junitVersion = '5.11.3'
     testcontainersVersion = '1.20.4'
+    openTelemetryVersion = '1.43.0'
+    openTelemetryInstrumentationVersion = '2.9.0'
 }
 
 // ==========================================
@@ -79,6 +81,16 @@ dependencies {
     implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
     implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.2.0'
 
+    // OpenTelemetry Core
+    implementation "io.opentelemetry:opentelemetry-api"
+    implementation "io.opentelemetry:opentelemetry-sdk"
+    implementation "io.opentelemetry:opentelemetry-sdk-metrics"
+    implementation "io.opentelemetry:opentelemetry-sdk-trace"
+    
+    // OpenTelemetry Exporters (legacy Jaeger exporter is deprecated, use OTLP instead)
+    implementation "io.opentelemetry:opentelemetry-exporter-otlp"
+    implementation "io.opentelemetry:opentelemetry-exporter-logging"
+
     // 測試依賴
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
@@ -99,5 +111,7 @@ dependencyManagement {
         mavenBom "org.testcontainers:testcontainers-bom:${testcontainersVersion}"
         mavenBom "com.fasterxml.jackson:jackson-bom:${jacksonVersion}"
         mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
+        mavenBom "io.opentelemetry:opentelemetry-bom:${openTelemetryVersion}"
+        mavenBom "io.opentelemetry.instrumentation:opentelemetry-instrumentation-bom:${openTelemetryInstrumentationVersion}"
     }
 }

@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # Jaeger all-in-one for development
+  jaeger:
+    image: jaegertracing/all-in-one:1.52
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14250:14250"  # gRPC endpoint
+      - "14268:14268"  # HTTP endpoint
+      - "6831:6831/udp"  # UDP endpoint
+      - "6832:6832/udp"  # UDP endpoint
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+    networks:
+      - tracing
+    volumes:
+      - jaeger_data:/tmp
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:14269/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.92.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./monitoring/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "8888:8888"   # Prometheus metrics
+      - "8889:8889"   # Prometheus exporter metrics
+    depends_on:
+      - jaeger
+    networks:
+      - tracing
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13133/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # gStream Gate Proxy with tracing
+  gstream-gate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"   # Web UI
+      - "9092:9092"   # gRPC Proxy
+    environment:
+      - SPRING_PROFILES_ACTIVE=development
+      - OPENTELEMETRY_EXPORTER_TYPE=jaeger
+      - JAEGER_ENDPOINT=http://jaeger:14250
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+    depends_on:
+      - jaeger
+    networks:
+      - tracing
+      - app
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  tracing:
+    driver: bridge
+  app:
+    driver: bridge
+
+volumes:
+  jaeger_data:
+    driver: local
