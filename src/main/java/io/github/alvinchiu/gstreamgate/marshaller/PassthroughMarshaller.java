@@ -1,6 +1,5 @@
 package io.github.alvinchiu.gstreamgate.marshaller;
 
-import com.google.common.io.ByteStreams;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusException;
@@ -8,13 +7,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 
 /**
  * A marshaller implementation that passes through binary data without any
  * actual serialization or deserialization. This allows proxying gRPC calls
  * without knowledge of the message types.
+ * 
+ * This implementation avoids blocking I/O operations and directly returns
+ * the input stream to maintain true zero-copy behavior when possible.
  */
 public class PassthroughMarshaller implements MethodDescriptor.Marshaller<InputStream> {
     private static final Logger logger = LoggerFactory.getLogger(PassthroughMarshaller.class);
@@ -27,18 +28,12 @@ public class PassthroughMarshaller implements MethodDescriptor.Marshaller<InputS
         }
 
         try {
-            byte[] bytes = ByteStreams.toByteArray(stream);
-            logger.debug("Parsed input stream, size: " + bytes.length + " bytes");
-            return new ByteArrayInputStream(bytes);
-        } catch (IOException e) {
-            logger.error("IO error parsing input stream: " + e.getMessage());
-            throw new RuntimeException(
-                    new StatusException(Status.INTERNAL
-                            .withDescription("IO error parsing input stream: " + e.getMessage())
-                            .withCause(e))
-            );
+            // Return the stream directly to avoid blocking I/O and memory copying
+            // This maintains zero-copy behavior and prevents performance bottlenecks
+            logger.debug("Parsing input stream (zero-copy pass-through)");
+            return stream;
         } catch (Exception e) {
-            logger.error("Unexpected error parsing input stream: " + e.getMessage());
+            logger.error("Unexpected error parsing input stream: {}", e.getMessage(), e);
             throw new RuntimeException(
                     new StatusException(Status.UNKNOWN
                             .withDescription("Unexpected error parsing input stream: " + e.getMessage())
@@ -55,18 +50,12 @@ public class PassthroughMarshaller implements MethodDescriptor.Marshaller<InputS
         }
 
         try {
-            byte[] bytes = ByteStreams.toByteArray(value);
-            logger.debug("Streamed input stream, size: " + bytes.length + " bytes");
-            return new ByteArrayInputStream(bytes);
-        } catch (IOException e) {
-            logger.error("IO error streaming input stream: " + e.getMessage());
-            throw new RuntimeException(
-                    new StatusException(Status.INTERNAL
-                            .withDescription("IO error streaming input stream: " + e.getMessage())
-                            .withCause(e))
-            );
+            // Return the stream directly to avoid blocking I/O and memory copying
+            // This maintains zero-copy behavior and prevents performance bottlenecks
+            logger.debug("Streaming input stream (zero-copy pass-through)");
+            return value;
         } catch (Exception e) {
-            logger.error("Unexpected error streaming input stream: " + e.getMessage());
+            logger.error("Unexpected error streaming input stream: {}", e.getMessage(), e);
             throw new RuntimeException(
                     new StatusException(Status.UNKNOWN
                             .withDescription("Unexpected error streaming input stream: " + e.getMessage())

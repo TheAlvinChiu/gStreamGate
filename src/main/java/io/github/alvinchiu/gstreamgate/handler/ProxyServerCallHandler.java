@@ -371,15 +371,8 @@ public class ProxyServerCallHandler implements ServerCallHandler<InputStream, In
                     if (halfCloseProcessed.compareAndSet(false, true)) {
                         logger.debug("[" + callId + "] Client stream completed, beginning half-close operation");
 
-                        // For multiple messages, add short delay
-                        if (messageCount > 2) {
-                            try {
-                                logger.debug("[" + callId + "] Multiple messages detected, adding delay before half-close");
-                                Thread.sleep(500); // 500ms delay
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                            }
-                        }
+                        // Remove blocking Thread.sleep() - process buffered messages directly
+                        // The message buffering system will handle proper sequencing
 
                         // Ensure all buffered messages are processed
                         processBufferedMessages();
@@ -923,15 +916,8 @@ public class ProxyServerCallHandler implements ServerCallHandler<InputStream, In
                             "ms based on message count: " + messageCount);
                 }
 
-                // Add delay
-                try {
-                    logger.debug("[" + callId + "] Adding delay of " + delayMs +
-                            "ms before processing half-close");
-                    Thread.sleep(delayMs);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    logger.warn("[" + callId + "] Interrupted during half-close delay");
-                }
+                // Remove blocking Thread.sleep() - process messages directly
+                // The buffering system will handle proper message sequencing
 
                 synchronized (bufferLock) {
                     // Process all remaining buffered messages

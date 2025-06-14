@@ -6,6 +6,7 @@ import io.github.alvinchiu.gstreamgate.circuit.CircuitBreakerManager;
 import io.github.alvinchiu.gstreamgate.marshaller.PassthroughMarshaller;
 import io.github.alvinchiu.gstreamgate.metrics.ProxyMetrics;
 import io.github.alvinchiu.gstreamgate.optimization.MemoryOptimizer;
+import io.github.alvinchiu.gstreamgate.tracing.TracingUtils;
 import io.grpc.*;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
@@ -38,6 +39,7 @@ public class OptimizedProxyServerCallHandler implements ServerCallHandler<InputS
     private static MemoryOptimizer memoryOptimizer;
     private static AdaptiveTimeoutManager timeoutManager;
     private static SmartFlowControlManager flowControlManager;
+    private static TracingUtils tracingUtils;
 
     // Default timeout setting
     private static final int DEFAULT_TIMEOUT_SECONDS = 300;
@@ -50,15 +52,17 @@ public class OptimizedProxyServerCallHandler implements ServerCallHandler<InputS
             ProxyMetrics metrics,
             MemoryOptimizer memoryOpt,
             AdaptiveTimeoutManager timeoutMgr,
-            SmartFlowControlManager flowControlMgr) {
+            SmartFlowControlManager flowControlMgr,
+            TracingUtils tracing) {
 
         circuitBreakerManager = circuitBreaker;
         proxyMetrics = metrics;
         memoryOptimizer = memoryOpt;
         timeoutManager = timeoutMgr;
         flowControlManager = flowControlMgr;
+        tracingUtils = tracing;
 
-        logger.info("Optimized components injected into ProxyServerCallHandler");
+        logger.info("Optimized components injected into ProxyServerCallHandler with tracing support");
     }
 
     public OptimizedProxyServerCallHandler(ManagedChannel channel, String fullMethodName, String targetKey) {
@@ -241,24 +245,6 @@ public class OptimizedProxyServerCallHandler implements ServerCallHandler<InputS
         }
     }
 
-    /**
-     * Helper: safely read InputStream to byte array
-     */
-    private static byte[] readInputStreamToBytes(InputStream inputStream) throws Exception {
-        if (inputStream instanceof ByteArrayInputStream) {
-            // Read directly if already ByteArrayInputStream
-            return inputStream.readAllBytes();
-        } else {
-            // Buffer using ByteArrayOutputStream
-            java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
-            byte[] temp = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(temp)) != -1) {
-                buffer.write(temp, 0, bytesRead);
-            }
-            return buffer.toByteArray();
-        }
-    }
 
     /**
      * Optimized client call listener
@@ -295,24 +281,18 @@ public class OptimizedProxyServerCallHandler implements ServerCallHandler<InputS
                 ByteBuf messageBuf = null;
                 InputStream processedMessage = message;
 
-                if (memoryOptimizer != null) {
-                    // Read message to byte array
-                    byte[] messageBytes = readInputStreamToBytes(message);
-                    totalBytesReceived += messageBytes.length;
-
-                    // Use zero-copy ByteBuf
-                    messageBuf = memoryOptimizer.createZeroCopyByteBuf(messageBytes);
-
-                    // Convert back to InputStream to send - fix API usage
-                    processedMessage = byteBufToInputStream(messageBuf);
-                } else {
-                    // Estimate byte size when no memory optimizer
+                // Use zero-copy approach - avoid blocking I/O operations
+                // PassthroughMarshaller now provides direct stream access
+                processedMessage = message;
+                
+                // Estimate message size for metrics without blocking reads
+                if (message.markSupported()) {
                     try {
-                        byte[] bytes = readInputStreamToBytes(message);
-                        totalBytesReceived += bytes.length;
-                        processedMessage = new ByteArrayInputStream(bytes);
+                        message.mark(Integer.MAX_VALUE);
+                        totalBytesReceived += message.available();
+                        message.reset();
                     } catch (Exception e) {
-                        logger.warn("[{}] Failed to read message bytes for size calculation", callId);
+                        logger.debug("[{}] Could not estimate message size: {}", callId, e.getMessage());
                     }
                 }
 
@@ -455,21 +435,18 @@ public class OptimizedProxyServerCallHandler implements ServerCallHandler<InputS
                 ByteBuf messageBuf = null;
                 InputStream processedMessage = message;
 
-                if (memoryOptimizer != null) {
-                    byte[] messageBytes = readInputStreamToBytes(message);
-                    totalBytesSent += messageBytes.length;
-
-                    // Use zero-copy ByteBuf
-                    messageBuf = memoryOptimizer.createZeroCopyByteBuf(messageBytes);
-                    processedMessage = byteBufToInputStream(messageBuf);
-                } else {
-                    // Estimate byte size when no memory optimizer
+                // Use zero-copy approach - avoid blocking I/O operations
+                // PassthroughMarshaller now provides direct stream access
+                processedMessage = message;
+                
+                // Estimate message size for metrics without blocking reads
+                if (message.markSupported()) {
                     try {
-                        byte[] bytes = readInputStreamToBytes(message);
-                        totalBytesSent += bytes.length;
-                        processedMessage = new ByteArrayInputStream(bytes);
+                        message.mark(Integer.MAX_VALUE);
+                        totalBytesSent += message.available();
+                        message.reset();
                     } catch (Exception e) {
-                        logger.warn("[{}] Failed to read message bytes for size calculation", callId);
+                        logger.debug("[{}] Could not estimate message size: {}", callId, e.getMessage());
                     }
                 }
 
@@ -523,17 +500,9 @@ public class OptimizedProxyServerCallHandler implements ServerCallHandler<InputS
             try {
                 logger.debug("[{}] Half-closing upstream call after {} messages", callId, messageCount);
 
-                // Add a small delay to ensure all messages processed
-                if (messageCount > 1) {
-                    Thread.sleep(100); // short delay
-                }
-
+                // Remove blocking Thread.sleep() - use asynchronous approach
+                // The flow control manager will handle proper message sequencing
                 clientCall.halfClose();
-
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                logger.warn("[{}] Interrupted during half-close", callId);
-                clientCall.cancel("Interrupted during half-close", e);
             } catch (Exception e) {
                 logger.error("[{}] Error during half-close: {}", callId, e.getMessage(), e);
                 clientCall.cancel("Half-close error", e);
