@@ -5,6 +5,7 @@ import {
   Activity,
   Settings,
   Users,
+  User,
   LogOut,
   Eye,
   EyeOff,
@@ -155,7 +156,26 @@ const ProxyService = {
 };
 
 // ===========================================
-// 3. 使用者管理服務 - API 呼叫模組
+// 3. 使用者個人設定服務 - API 呼叫模組
+// ===========================================
+const UserProfileService = {
+  baseUrl: '/api/user/profile',
+
+  async changePassword(token: string, currentPassword: string, newPassword: string) {
+    const response = await fetch(`${this.baseUrl}/password`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+    return response.json();
+  }
+};
+
+// ===========================================
+// 4. 使用者管理服務 - API 呼叫模組
 // ===========================================
 const UserManagementService = {
   baseUrl: '/api/admin/users',
@@ -479,15 +499,22 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
         </nav>
 
         <div className="p-4 border-t border-gray-700">
-          <div className="flex items-center space-x-3 mb-4">
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={`w-full flex items-center space-x-3 mb-4 p-2 rounded-lg transition-colors ${
+              activeTab === 'profile' 
+                ? 'bg-blue-600 text-white' 
+                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+            }`}
+          >
             <div className="h-8 w-8 bg-gray-600 rounded-full flex items-center justify-center">
-              <Users className="h-4 w-4" />
+              <User className="h-4 w-4" />
             </div>
-            <div className="flex-1">
+            <div className="flex-1 text-left">
               <p className="text-sm font-medium">{user?.username}</p>
               <p className="text-xs text-gray-400">{isAdmin ? '管理員' : '使用者'}</p>
             </div>
-          </div>
+          </button>
           <button
               onClick={logout}
               className="w-full flex items-center space-x-3 px-4 py-2 text-gray-300 hover:bg-gray-800 hover:text-white rounded-lg transition-colors"
@@ -516,11 +543,31 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
+        console.log('開始載入統計資料...');
+        
+        // 分別調用各個API，這樣可以看到具體哪個失敗了
+        const allProxiesPromise = ProxyService.getAllProxies(token!).catch(err => {
+          console.error('getAllProxies failed:', err);
+          return [];
+        });
+        
+        const healthPromise = ProxyService.getHealth(token!).catch(err => {
+          console.error('getHealth failed:', err);
+          return { status: 'DOWN' };
+        });
+        
+        const activePromise = ProxyService.getActiveProxies(token!).catch(err => {
+          console.error('getActiveProxies failed:', err);
+          return { count: 0 };
+        });
+
         const [allProxies, health, active] = await Promise.all([
-          ProxyService.getAllProxies(token!),
-          ProxyService.getHealth(token!),
-          ProxyService.getActiveProxies(token!)
+          allProxiesPromise,
+          healthPromise,
+          activePromise
         ]);
+
+        console.log('API 回應:', { allProxies, health, active });
 
         setStats({
           totalProxies: allProxies.length || 0,
@@ -530,6 +577,11 @@ const Dashboard: React.FC = () => {
         });
       } catch (error) {
         console.error('載入統計資料錯誤:', error);
+        // 設置一個預設的異常狀態
+        setStats(prev => ({
+          ...prev,
+          systemHealth: 'unhealthy'
+        }));
       } finally {
         setLoading(false);
       }
@@ -1913,7 +1965,191 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave, token }) =
 };
 
 // ===========================================
-// 11. 主應用程式組件
+// 11. 個人設定組件
+// ===========================================
+const UserProfile: React.FC = () => {
+  const { token, user } = useAuth();
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage('');
+    setError('');
+
+    if (newPassword !== confirmPassword) {
+      setError('新密碼與確認密碼不符');
+      setLoading(false);
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setError('新密碼長度至少6個字符');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const result = await UserProfileService.changePassword(token!, currentPassword, newPassword);
+      if (result.error) {
+        setError(result.error);
+      } else {
+        setMessage('密碼變更成功');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+    } catch (error: any) {
+      setError(error.message || '密碼變更失敗');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+      <h1 className="text-2xl font-bold text-gray-900">個人設定</h1>
+
+      {/* 用戶資訊 */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">帳戶資訊</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              使用者名稱
+            </label>
+            <input
+              type="text"
+              value={user?.username || ''}
+              disabled
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              角色
+            </label>
+            <input
+              type="text"
+              value={user?.role === 'ADMIN' ? '管理員' : '使用者'}
+              disabled
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 密碼變更 */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">變更密碼</h2>
+        
+        {message && (
+          <div className="mb-4 px-4 py-3 rounded-lg bg-green-50 border border-green-200 text-green-600">
+            {message}
+          </div>
+        )}
+        
+        {error && (
+          <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-600">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handlePasswordChange} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              目前密碼 *
+            </label>
+            <div className="relative">
+              <input
+                type={showCurrentPassword ? 'text' : 'password'}
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="請輸入目前密碼"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+              >
+                {showCurrentPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              新密碼 *
+            </label>
+            <div className="relative">
+              <input
+                type={showNewPassword ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="請輸入新密碼（至少6個字符）"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+              >
+                {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              確認新密碼 *
+            </label>
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="請再次輸入新密碼"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+              >
+                {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? '變更中...' : '變更密碼'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// ===========================================
+// 12. 主應用程式組件
 // ===========================================
 const App: React.FC = () => {
   const { user, loading } = useAuth();
@@ -1940,6 +2176,8 @@ const App: React.FC = () => {
         return <Dashboard />;
       case 'proxies':
         return <ProxyManagement />;
+      case 'profile':
+        return <UserProfile />;
       case 'settings':
         return <SystemSettings />;
       case 'users':

@@ -107,14 +107,17 @@ public class SecurityConfig {
                     authz.requestMatchers("/actuator/**").hasRole("ADMIN");
                     authz.requestMatchers("/api/proxy/refresh").hasRole("ADMIN");
                     authz.requestMatchers("/api/proxy/*/status").hasRole("ADMIN");
+                    
+                    // 代理管理端點 - 需要認證 (必須放在 /api/proxy/* 之前)
+                    authz.requestMatchers("/api/proxy/test", "/api/proxy/health", "/api/proxy/active").authenticated();
                     authz.requestMatchers("/api/proxy", "/api/proxy/enabled").hasAnyRole("USER", "ADMIN");
                     authz.requestMatchers("/api/proxy/*").hasRole("ADMIN"); // 個別代理操作需要管理員權限
 
                     // 需要認證的用戶端點
                     authz.requestMatchers("/api/auth/logout", "/api/auth/validate", "/api/auth/me").authenticated();
-
-                    // 代理管理端點 - 需要認證
-                    authz.requestMatchers("/api/proxy/test", "/api/proxy/health", "/api/proxy/active").authenticated();
+                    
+                    // 用戶個人設定端點 - 需要認證
+                    authz.requestMatchers("/api/user/profile/**").authenticated();
 
                     // 所有其他請求都需要認證
                     authz.anyRequest().authenticated();

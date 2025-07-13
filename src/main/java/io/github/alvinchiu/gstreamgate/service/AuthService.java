@@ -246,4 +246,38 @@ public class AuthService implements UserDetailsService {
             return response;
         }
     }
+
+    public Map<String, Object> getCurrentUserInfo(String token) {
+        try {
+            if (isTokenBlacklisted(token)) {
+                throw new RuntimeException("Token has been revoked");
+            }
+
+            if (!jwtUtil.isTokenValid(token)) {
+                throw new RuntimeException("Token is invalid or expired");
+            }
+
+            String username = jwtUtil.extractUsername(token);
+            User user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("authenticated", true);
+            response.put("username", user.getUsername());
+            response.put("role", user.getRole().toString());
+            response.put("email", user.getEmail());
+            response.put("enabled", user.isEnabled());
+
+            return response;
+
+        } catch (Exception e) {
+            logger.error("Get current user info failed: {}", e.getMessage());
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("authenticated", false);
+            response.put("error", e.getMessage());
+
+            return response;
+        }
+    }
 }

@@ -8,6 +8,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,6 +69,9 @@ public class UserManagementService {
         logger.info("Updating user: {}", id);
 
         User user = getUserById(id);
+        
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String currentUsername = authentication != null ? authentication.getName() : null;
 
         if (request.getUsername() != null && !request.getUsername().equals(user.getUsername())) {
             if (userRepository.existsByUsername(request.getUsername())) {
@@ -83,6 +88,17 @@ public class UserManagementService {
         }
 
         if (request.getRole() != null) {
+            if (currentUsername != null && user.getUsername().equals(currentUsername) && user.getRole() == User.Role.ADMIN && request.getRole() != User.Role.ADMIN) {
+                throw new RuntimeException("Admin users cannot demote themselves");
+            }
+            
+            if (user.getRole() == User.Role.ADMIN && request.getRole() != User.Role.ADMIN) {
+                long adminCount = userRepository.countByRole(User.Role.ADMIN);
+                if (adminCount <= 1) {
+                    throw new RuntimeException("Cannot change role of the last admin user");
+                }
+            }
+            
             user.setRole(request.getRole());
         }
 
@@ -141,6 +157,13 @@ public class UserManagementService {
 
         User user = getUserById(id);
         User.Role oldRole = user.getRole();
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String currentUsername = authentication != null ? authentication.getName() : null;
+        
+        if (currentUsername != null && user.getUsername().equals(currentUsername) && oldRole == User.Role.ADMIN && newRole != User.Role.ADMIN) {
+            throw new RuntimeException("Admin users cannot demote themselves");
+        }
 
         if (oldRole == User.Role.ADMIN && newRole != User.Role.ADMIN) {
             long adminCount = userRepository.countByRole(User.Role.ADMIN);

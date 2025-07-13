@@ -93,15 +93,12 @@ public class AuthController {
     public ResponseEntity<Map<String, Object>> getCurrentUser(@RequestHeader("Authorization") String authHeader) {
         try {
             String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
-            Map<String, Object> validation = getAuthService().validateToken(token);
+            Map<String, Object> userInfo = getAuthService().getCurrentUserInfo(token);
 
-            if (Boolean.TRUE.equals(validation.get("valid"))) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("username", validation.get("username"));
-                response.put("authenticated", true);
-                return ResponseEntity.ok(response);
+            if (Boolean.TRUE.equals(userInfo.get("authenticated"))) {
+                return ResponseEntity.ok(userInfo);
             } else {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(validation);
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(userInfo);
             }
         } catch (Exception e) {
             logger.error("Get current user failed: {}", e.getMessage());
