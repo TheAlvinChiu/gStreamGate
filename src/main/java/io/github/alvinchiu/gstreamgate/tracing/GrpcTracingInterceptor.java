@@ -1,5 +1,6 @@
 package io.github.alvinchiu.gstreamgate.tracing;
 
+import io.github.alvinchiu.gstreamgate.service.GrpcCallLogService;
 import io.grpc.*;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Span;
@@ -10,8 +11,12 @@ import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.net.InetSocketAddress;
+import java.time.LocalDateTime;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -24,15 +29,18 @@ public class GrpcTracingInterceptor implements ServerInterceptor, ClientIntercep
     
     private final Tracer tracer;
     private final boolean tracingEnabled;
+    private final GrpcCallLogService grpcCallLogService;
 
-    public GrpcTracingInterceptor(OpenTelemetry openTelemetry) {
+    @Autowired
+    public GrpcTracingInterceptor(OpenTelemetry openTelemetry, GrpcCallLogService grpcCallLogService) {
         this.tracer = openTelemetry.getTracer("gstream-gate-grpc", "1.0.0");
         this.tracingEnabled = openTelemetry != OpenTelemetry.noop();
+        this.grpcCallLogService = grpcCallLogService;
         
         if (tracingEnabled) {
-            logger.info("gRPC tracing interceptor initialized");
+            logger.info("gRPC tracing interceptor initialized with call logging");
         } else {
-            logger.info("gRPC tracing interceptor initialized (tracing disabled)");
+            logger.info("gRPC tracing interceptor initialized (tracing disabled) with call logging");
         }
     }
 

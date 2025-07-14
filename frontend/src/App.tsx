@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Shield,
   Server,
@@ -175,7 +175,122 @@ const UserProfileService = {
 };
 
 // ===========================================
-// 4. 使用者管理服務 - API 呼叫模組
+// 4. gRPC 呼叫記錄服務 - API 呼叫模組
+// ===========================================
+const GrpcCallLogService = {
+  baseUrl: '/api/grpc-logs',
+
+  async getAllLogs(token: string, page: number = 0, size: number = 20, sortBy: string = 'callStartTime', sortDirection: string = 'desc') {
+    const response = await fetch(`${this.baseUrl}?page=${page}&size=${size}&sortBy=${sortBy}&sortDirection=${sortDirection}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async searchLogs(token: string, filters: any, page: number = 0, size: number = 20, sortBy: string = 'callStartTime', sortDirection: string = 'desc') {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      size: size.toString(),
+      sortBy: sortBy,
+      sortDirection: sortDirection
+    });
+
+    // 添加搜尋過濾器
+    if (filters.clientIp) params.append('clientIp', filters.clientIp);
+    if (filters.targetLocation) params.append('targetLocation', filters.targetLocation);
+    if (filters.methodName) params.append('methodName', filters.methodName);
+    if (filters.statusCode) params.append('statusCode', filters.statusCode);
+    if (filters.callType) params.append('callType', filters.callType);
+    if (filters.startTime) params.append('startTime', filters.startTime);
+    if (filters.endTime) params.append('endTime', filters.endTime);
+
+    const response = await fetch(`${this.baseUrl}/search?${params}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async getLogsByClientIp(token: string, clientIp: string, page: number = 0, size: number = 20) {
+    const response = await fetch(`${this.baseUrl}/by-client-ip?clientIp=${encodeURIComponent(clientIp)}&page=${page}&size=${size}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async getLogsByTargetLocation(token: string, targetLocation: string, page: number = 0, size: number = 20) {
+    const response = await fetch(`${this.baseUrl}/by-target-location?targetLocation=${encodeURIComponent(targetLocation)}&page=${page}&size=${size}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async getLogsByMethodName(token: string, methodName: string, page: number = 0, size: number = 20) {
+    const response = await fetch(`${this.baseUrl}/by-method-name?methodName=${encodeURIComponent(methodName)}&page=${page}&size=${size}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async getLogsByStatusCode(token: string, statusCode: string, page: number = 0, size: number = 20) {
+    const response = await fetch(`${this.baseUrl}/by-status-code?statusCode=${encodeURIComponent(statusCode)}&page=${page}&size=${size}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async getLogsByTraceId(token: string, traceId: string, page: number = 0, size: number = 20) {
+    const response = await fetch(`${this.baseUrl}/by-trace-id?traceId=${encodeURIComponent(traceId)}&page=${page}&size=${size}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async getRecentLogs(token: string) {
+    const response = await fetch(`${this.baseUrl}/recent`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async getSlowestLogs(token: string) {
+    const response = await fetch(`${this.baseUrl}/slowest`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async getStatistics(token: string) {
+    const response = await fetch(`${this.baseUrl}/statistics`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async countCallsInTimeRange(token: string, startTime: string, endTime: string) {
+    const response = await fetch(`${this.baseUrl}/count-by-time-range?startTime=${encodeURIComponent(startTime)}&endTime=${encodeURIComponent(endTime)}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async countCallsByStatusCode(token: string, statusCode: string) {
+    const response = await fetch(`${this.baseUrl}/count-by-status-code?statusCode=${encodeURIComponent(statusCode)}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.json();
+  },
+
+  async cleanupOldLogs(token: string, cutoffTime: string) {
+    const response = await fetch(`${this.baseUrl}/cleanup?cutoffTime=${encodeURIComponent(cutoffTime)}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.text();
+  }
+};
+
+// ===========================================
+// 5. 使用者管理服務 - API 呼叫模組
 // ===========================================
 const UserManagementService = {
   baseUrl: '/api/admin/users',
@@ -458,6 +573,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
   const menuItems = [
     { id: 'dashboard', label: '儀表板', icon: Activity, adminOnly: false },
     { id: 'proxies', label: '代理管理', icon: Server, adminOnly: false },
+    { id: 'grpc-logs', label: 'gRPC 呼叫記錄', icon: CheckCircle, adminOnly: false },
     { id: 'settings', label: '系統設定', icon: Settings, adminOnly: true },
     { id: 'users', label: '使用者管理', icon: Users, adminOnly: true }
   ];
@@ -2149,7 +2265,458 @@ const UserProfile: React.FC = () => {
 };
 
 // ===========================================
-// 12. 主應用程式組件
+// 12. gRPC 呼叫記錄組件
+// ===========================================
+const GrpcCallLogs: React.FC = () => {
+  const { token } = useAuth();
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [totalPages, setTotalPages] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
+  const [sortBy, setSortBy] = useState('callStartTime');
+  const [sortDirection, setSortDirection] = useState('desc');
+  
+  // 搜尋過濾器
+  const [filters, setFilters] = useState({
+    clientIp: '',
+    targetLocation: '',
+    methodName: '',
+    statusCode: '',
+    callType: '',
+    startTime: '',
+    endTime: ''
+  });
+  
+  const [showFilters, setShowFilters] = useState(false);
+  const [statistics, setStatistics] = useState<any>(null);
+
+  const fetchLogs = useCallback(async () => {
+    try {
+      setLoading(true);
+      let response;
+      
+      // 檢查是否有任何過濾器
+      const hasFilters = Object.values(filters).some(value => value !== '');
+      
+      if (hasFilters) {
+        response = await GrpcCallLogService.searchLogs(token!, filters, currentPage, pageSize, sortBy, sortDirection);
+      } else {
+        response = await GrpcCallLogService.getAllLogs(token!, currentPage, pageSize, sortBy, sortDirection);
+      }
+      
+      setLogs(response.content || []);
+      setTotalPages(response.totalPages || 0);
+    } catch (error) {
+      console.error('載入 gRPC 呼叫記錄錯誤:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, filters, currentPage, pageSize, sortBy, sortDirection]);
+
+  const fetchStatistics = useCallback(async () => {
+    try {
+      const stats = await GrpcCallLogService.getStatistics(token!);
+      setStatistics(stats);
+    } catch (error) {
+      console.error('載入統計資料錯誤:', error);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (token) {
+      fetchLogs();
+      fetchStatistics();
+    }
+  }, [token, currentPage, pageSize, sortBy, sortDirection, fetchLogs, fetchStatistics]);
+
+  const handleSearch = () => {
+    setCurrentPage(0);
+    fetchLogs();
+  };
+
+  const handleClearFilters = () => {
+    setFilters({
+      clientIp: '',
+      targetLocation: '',
+      methodName: '',
+      statusCode: '',
+      callType: '',
+      startTime: '',
+      endTime: ''
+    });
+    setCurrentPage(0);
+    setTimeout(() => fetchLogs(), 100);
+  };
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortDirection('desc');
+    }
+    setCurrentPage(0);
+  };
+
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString('zh-TW');
+  };
+
+  const formatDuration = (ms: number) => {
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    return `${(ms / 60000).toFixed(1)}m`;
+  };
+
+  const getStatusColor = (statusCode: string) => {
+    if (statusCode === 'OK') return 'text-green-600 bg-green-50';
+    if (statusCode.includes('ERROR') || statusCode.includes('FAILED')) return 'text-red-600 bg-red-50';
+    if (statusCode === 'CANCELLED') return 'text-yellow-600 bg-yellow-50';
+    return 'text-gray-600 bg-gray-50';
+  };
+
+  if (loading && logs.length === 0) {
+    return (
+      <div className="p-6">
+        <div className="flex justify-center items-center h-64">
+          <RefreshCw className="h-8 w-8 animate-spin text-blue-500" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-gray-900">gRPC 呼叫記錄</h1>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Search className="h-4 w-4" />
+            <span>搜尋過濾</span>
+          </button>
+          <button
+            onClick={fetchLogs}
+            disabled={loading}
+            className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>重新載入</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 統計資料 */}
+      {statistics && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-lg border">
+            <div className="text-sm text-gray-600">總呼叫數</div>
+            <div className="text-2xl font-bold text-blue-600">{statistics.totalCalls || 0}</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg border">
+            <div className="text-sm text-gray-600">成功呼叫</div>
+            <div className="text-2xl font-bold text-green-600">{statistics.successfulCalls || 0}</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg border">
+            <div className="text-sm text-gray-600">失敗呼叫</div>
+            <div className="text-2xl font-bold text-red-600">{statistics.failedCalls || 0}</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg border">
+            <div className="text-sm text-gray-600">平均執行時間</div>
+            <div className="text-2xl font-bold text-purple-600">{formatDuration(statistics.avgExecutionTime || 0)}</div>
+          </div>
+        </div>
+      )}
+
+      {/* 搜尋過濾器 */}
+      {showFilters && (
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-semibold mb-4">搜尋過濾器</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">客戶端 IP</label>
+              <input
+                type="text"
+                value={filters.clientIp}
+                onChange={(e) => setFilters({...filters, clientIp: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="例如: 192.168.1.1"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">目標位置</label>
+              <input
+                type="text"
+                value={filters.targetLocation}
+                onChange={(e) => setFilters({...filters, targetLocation: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="例如: example.com:8080"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">呼叫方法</label>
+              <input
+                type="text"
+                value={filters.methodName}
+                onChange={(e) => setFilters({...filters, methodName: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="例如: /service/Method"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">狀態碼</label>
+              <select
+                value={filters.statusCode}
+                onChange={(e) => setFilters({...filters, statusCode: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">全部</option>
+                <option value="OK">OK</option>
+                <option value="CANCELLED">CANCELLED</option>
+                <option value="UNKNOWN">UNKNOWN</option>
+                <option value="INVALID_ARGUMENT">INVALID_ARGUMENT</option>
+                <option value="DEADLINE_EXCEEDED">DEADLINE_EXCEEDED</option>
+                <option value="NOT_FOUND">NOT_FOUND</option>
+                <option value="ALREADY_EXISTS">ALREADY_EXISTS</option>
+                <option value="PERMISSION_DENIED">PERMISSION_DENIED</option>
+                <option value="UNAUTHENTICATED">UNAUTHENTICATED</option>
+                <option value="RESOURCE_EXHAUSTED">RESOURCE_EXHAUSTED</option>
+                <option value="FAILED_PRECONDITION">FAILED_PRECONDITION</option>
+                <option value="ABORTED">ABORTED</option>
+                <option value="OUT_OF_RANGE">OUT_OF_RANGE</option>
+                <option value="UNIMPLEMENTED">UNIMPLEMENTED</option>
+                <option value="INTERNAL">INTERNAL</option>
+                <option value="UNAVAILABLE">UNAVAILABLE</option>
+                <option value="DATA_LOSS">DATA_LOSS</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">呼叫類型</label>
+              <select
+                value={filters.callType}
+                onChange={(e) => setFilters({...filters, callType: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">全部</option>
+                <option value="UNARY">UNARY</option>
+                <option value="CLIENT_STREAMING">CLIENT_STREAMING</option>
+                <option value="SERVER_STREAMING">SERVER_STREAMING</option>
+                <option value="BIDI_STREAMING">BIDI_STREAMING</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">開始時間</label>
+              <input
+                type="datetime-local"
+                value={filters.startTime}
+                onChange={(e) => setFilters({...filters, startTime: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end space-x-3 mt-4">
+            <button
+              onClick={handleClearFilters}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              清除過濾器
+            </button>
+            <button
+              onClick={handleSearch}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              搜尋
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 表格 */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('callStartTime')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>呼叫時間</span>
+                    {sortBy === 'callStartTime' && (
+                      <span className={`transform transition-transform ${sortDirection === 'asc' ? 'rotate-180' : ''}`}>
+                        ▼
+                      </span>
+                    )}
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('clientIp')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>客戶端 IP</span>
+                    {sortBy === 'clientIp' && (
+                      <span className={`transform transition-transform ${sortDirection === 'asc' ? 'rotate-180' : ''}`}>
+                        ▼
+                      </span>
+                    )}
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('targetLocation')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>目標位置</span>
+                    {sortBy === 'targetLocation' && (
+                      <span className={`transform transition-transform ${sortDirection === 'asc' ? 'rotate-180' : ''}`}>
+                        ▼
+                      </span>
+                    )}
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('methodName')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>呼叫方法</span>
+                    {sortBy === 'methodName' && (
+                      <span className={`transform transition-transform ${sortDirection === 'asc' ? 'rotate-180' : ''}`}>
+                        ▼
+                      </span>
+                    )}
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('executionTimeMs')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>執行時間</span>
+                    {sortBy === 'executionTimeMs' && (
+                      <span className={`transform transition-transform ${sortDirection === 'asc' ? 'rotate-180' : ''}`}>
+                        ▼
+                      </span>
+                    )}
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('statusCode')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>狀態碼</span>
+                    {sortBy === 'statusCode' && (
+                      <span className={`transform transition-transform ${sortDirection === 'asc' ? 'rotate-180' : ''}`}>
+                        ▼
+                      </span>
+                    )}
+                  </div>
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  類型
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {logs.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                    沒有找到呼叫記錄
+                  </td>
+                </tr>
+              ) : (
+                logs.map((log, index) => (
+                  <tr key={log.id || index} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {formatDateTime(log.callStartTime)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {log.clientIp}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {log.targetLocation}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
+                        {log.methodName}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {formatDuration(log.executionTimeMs)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(log.statusCode)}`}>
+                        {log.statusCode}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        {log.callType}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 分頁 */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-700">每頁顯示:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(parseInt(e.target.value));
+                setCurrentPage(0);
+              }}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+              disabled={currentPage === 0}
+              className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              上一頁
+            </button>
+            
+            <span className="text-sm text-gray-700">
+              第 {currentPage + 1} 頁，共 {totalPages} 頁
+            </span>
+            
+            <button
+              onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
+              disabled={currentPage >= totalPages - 1}
+              className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              下一頁
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ===========================================
+// 13. 主應用程式組件
 // ===========================================
 const App: React.FC = () => {
   const { user, loading } = useAuth();
@@ -2182,6 +2749,8 @@ const App: React.FC = () => {
         return <SystemSettings />;
       case 'users':
         return <UserManagement />;
+      case 'grpc-logs':
+        return <GrpcCallLogs />;
       default:
         return <Dashboard />;
     }

@@ -7,6 +7,7 @@ import io.github.alvinchiu.gstreamgate.event.UpstreamHealthCheckEvent;
 import io.github.alvinchiu.gstreamgate.handler.HostBasedHandlerRegistry;
 import io.github.alvinchiu.gstreamgate.manager.DynamicGrpcProxyManager;
 import io.github.alvinchiu.gstreamgate.repository.GrpcProxyMapRepository;
+import io.github.alvinchiu.gstreamgate.tracing.GrpcCallLoggingInterceptor;
 import io.github.alvinchiu.gstreamgate.util.ExecutorManager;
 import io.grpc.*;
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
@@ -46,6 +47,7 @@ public class GrpcProxyServer {
     private final GrpcProxyMapRepository grpcProxyMapRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final ExecutorManager executorManager;
+    private final GrpcCallLoggingInterceptor grpcCallLoggingInterceptor;
 
     // Health check related fields
     private final Map<String, UpstreamServiceStatus> upstreamStatusMap = new ConcurrentHashMap<>();
@@ -69,17 +71,19 @@ public class GrpcProxyServer {
                            GrpcProxyMapRepository grpcProxyMapRepository,
                            ApplicationEventPublisher eventPublisher,
                            ExecutorManager executorManager,
+                           GrpcCallLoggingInterceptor grpcCallLoggingInterceptor,
                            @Autowired(required = false) SslContext sslContext) {
         this.proxyProperties = proxyProperties;
         this.proxyManager = proxyManager;
         this.grpcProxyMapRepository = grpcProxyMapRepository;
         this.eventPublisher = eventPublisher;
         this.executorManager = executorManager;
+        this.grpcCallLoggingInterceptor = grpcCallLoggingInterceptor;
         this.sslContext = sslContext; // May be null
         this.serverPort = proxyProperties.getServer().getPort();
 
         // Log server initialization
-        logger.info("Initializing gRPC proxy server on port " + serverPort);
+        logger.info("Initializing gRPC proxy server on port " + serverPort + " with call logging");
     }
 
     /**
@@ -99,6 +103,7 @@ public class GrpcProxyServer {
                 // Use the injected SslContext with improved HTTP/2 settings
                 serverBuilder = NettyServerBuilder.forAddress(new InetSocketAddress("0.0.0.0", serverPort))
                         .intercept(createLoggingInterceptor())
+                        .intercept(grpcCallLoggingInterceptor)
                         .sslContext(sslContext)
                         // Modify HTTP/2 related settings, solve too_many_pings issue
                         .keepAliveTime(120, TimeUnit.SECONDS)              // Increase to 120 seconds
@@ -116,6 +121,7 @@ public class GrpcProxyServer {
                 // Use plain server with improved HTTP/2 settings
                 serverBuilder = ServerBuilder.forPort(serverPort)
                         .intercept(createLoggingInterceptor())
+                        .intercept(grpcCallLoggingInterceptor)
                         // Set HTTP/2 parameters for plain server too
                         .maxInboundMessageSize(20 * 1024 * 1024)
                         .maxInboundMetadataSize(16 * 1024);
